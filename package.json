@@ -1,0 +1,19 @@
+{
+  "name": "cap-cloze-proxy",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Local proxy to forward requests to OpenAI for cap_cloze_refiner.html",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.22.1",
+    "open": "^11.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

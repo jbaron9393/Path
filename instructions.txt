@@ -1,0 +1,17 @@
+HOW TO START CLOZE REFINER
+
+1. Open the folder:
+   cap cloze refiner
+
+2. Click the address bar at the top of File Explorer
+
+3. Type:
+   cmd
+   then press Enter
+
+4. In the black window that opens, paste: node server.js
+
+5. Press Enter
+
+6. When it says server is running, your website opens automatically.
+
