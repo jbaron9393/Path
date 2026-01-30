@@ -133,6 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
           delimiter: getDelimiter(),
         }),
       });
+      
 
       const bodyText = await res.text();
       if (!res.ok) throw new Error(bodyText);
@@ -230,4 +231,127 @@ document.addEventListener("DOMContentLoaded", () => {
   // default state
   setActionsEnabled(false);
   setStatus("Ready to refine");
+    // ============================
+  // REWRITER TAB WIRING
+  // ============================
+  let rwPreset = "email";
+
+  const rwInput = document.getElementById("rwInput");
+  const rwOutput = document.getElementById("rwOutput");
+  const rwRun = document.getElementById("rwRun");
+  const rwClear = document.getElementById("rwClear");
+  const rwRules = document.getElementById("rwRules");
+  const rwPresetBtns = document.querySelectorAll(".rwPreset");
+
+  // If the rewriter panel isn't on this page, don't crash.
+  if (rwInput && rwOutput && rwRun && rwClear && rwRules) {
+    // Optional: default rules text (edit as you like)
+    if (!rwRules.value.trim()) {
+      rwRules.value =
+`- Keep meaning identical
+- Remove filler
+- Keep qualifiers (e.g., focal, patchy, cannot exclude)
+- No new facts`;
+    }
+
+    rwPresetBtns.forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        rwPreset = b.dataset.preset || "email";
+
+        // UI feedback: highlight active preset
+        rwPresetBtns.forEach(x => x.classList.remove("bg-primary-600", "text-white"));
+        b.classList.add("bg-primary-600", "text-white");
+        setStatus(`Rewriter mode: ${rwPreset}`);
+      });
+    });
+
+    rwClear.addEventListener("click", (e) => {
+      e.preventDefault();
+      rwInput.value = "";
+      rwOutput.value = "";
+      setStatus("Cleared rewriter.");
+      rwInput.focus();
+    });
+
+    rwRun.addEventListener("click", async (e) => {
+      e.preventDefault();
+
+      const text = (rwInput.value || "").trim();
+      if (!text) return setStatus("Paste text to rewrite first.");
+
+      rwRun.disabled = true;
+      setStatus("Rewriting…");
+
+      try {
+        const res = await fetch("/api/rewrite", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: Number(tempEl?.value) || 0.2,
+            preset: rwPreset,
+            rules: rwRules.value || ""
+          }),
+        });
+
+        const bodyText = await res.text();
+        if (!res.ok) throw new Error(bodyText);
+
+        const j = JSON.parse(bodyText);
+        rwOutput.value = (j.text ?? "").trim();
+        setStatus("Done — rewritten.");
+      } catch (err) {
+        console.error("Rewriter error:", err);
+        setStatus("Rewriter error: " + (err?.message || String(err)));
+      } finally {
+        rwRun.disabled = false;
+      }
+    });
+
+    // Default active preset highlight
+    const first = document.querySelector('.rwPreset[data-preset="email"]');
+    if (first) first.classList.add("bg-primary-600", "text-white");
+  }
+
 });
+let rwPreset = "email";
+
+const rwInput = document.getElementById("rwInput");
+const rwOutput = document.getElementById("rwOutput");
+const rwRun = document.getElementById("rwRun");
+const rwClear = document.getElementById("rwClear");
+const rwRules = document.getElementById("rwRules");
+
+document.querySelectorAll(".rwPreset").forEach(b=>{
+  b.onclick=()=> rwPreset=b.dataset.preset;
+});
+
+rwClear.onclick = () => {
+  rwInput.value="";
+  rwOutput.value="";
+};
+
+rwRun.onclick = async () => {
+  if(!rwInput.value.trim()) return;
+
+const res = await fetch("/api/refine", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    text: raw,
+    model: modelEl.value,
+    temperature: Number(tempEl.value),
+    delimiter: getDelimiter(),
+  }),
+});
+
+
+  const t = await res.text();
+  if(!res.ok) return alert(t);
+
+  rwOutput.value = JSON.parse(t).text;
+};

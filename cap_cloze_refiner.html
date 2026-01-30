@@ -51,28 +51,16 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 
-  <!-- Cursor / overlay sanity rules -->
   <style>
-    /* Ensure text cursor on editable controls */
-    textarea, input[type="text"], input[type="number"], input[type="search"], select {
-      cursor: text;
-    }
-    button, a, label, [role="button"] {
-      cursor: pointer;
-    }
-    /* If you have any decorative layers, they must not capture the mouse */
-    .bg-decor {
-      pointer-events: none;
-    }
+    textarea, input[type="text"], input[type="number"], input[type="search"], select { cursor: text; }
+    button, a, label, [role="button"] { cursor: pointer; }
+    .bg-decor { pointer-events: none; }
   </style>
 </head>
 
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen p-4 md:p-8">
 
-  <!-- Optional decorative layer (safe) -->
-  <div class="bg-decor fixed inset-0 -z-10">
-    <!-- keep empty or add soft gradients/blobs later -->
-  </div>
+  <div class="bg-decor fixed inset-0 -z-10"></div>
 
   <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
     <!-- Header -->
@@ -93,58 +81,77 @@
     </div>
 
     <div class="p-6 space-y-6">
-      <!-- Toolbar -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-        <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-feather="cpu" class="w-3.5 h-3.5"></i>
-            Model
-          </label>
-          <select id="model" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
-            <option value="gpt-4.1-mini">gpt-4.1-mini (fast)</option>
-            <option value="gpt-4.1">gpt-4.1 (quality)</option>
-          </select>
-        </div>
 
-        <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-feather="thermometer" class="w-3.5 h-3.5"></i>
-            Temperature
-          </label>
-          <input id="temp" type="number" step="0.1" min="0" max="2" value="0.2"
-            class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-text">
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-feather="0" class="w-3.5 h-3.5"></i>
-            ~~Insert Card Break~~
-          </label>
-          <button
-  id="autoInsert"
-  type="button"
-  class="mt-2 inline-flex items-center gap-4 px-20 py-2.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all active:scale-95"
->
-╾╾╾ ◆ ╾╾╾
-
-          </button>
-        </div>
+      <!-- Tabs (ONE tab bar only) -->
+      <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+        <button type="button"
+          class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-primary-600 text-white"
+          data-tab="refiner">
+          Refiner
+        </button>
+        <button type="button"
+          class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200"
+          data-tab="rewriter">
+          Rewriter
+        </button>
       </div>
 
-      <!-- Main Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Input Section -->
-        <div class="space-y-3 flex flex-col">
-          <div class="flex items-center justify-between">
-            <label class="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <i data-feather="edit-3" class="w-4 h-4 text-primary-600"></i>
-              Bulk Input
+      <!-- ========================= -->
+      <!-- REFiner PANEL (ORIGINAL UI, UNCHANGED) -->
+      <!-- ========================= -->
+      <section class="tab-panel" data-panel="refiner">
+
+        <!-- Toolbar -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-feather="cpu" class="w-3.5 h-3.5"></i>
+              Model
             </label>
-            <span class="text-xs text-slate-400" id="inputStats">0 cards detected</span>
+            <select id="model" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+              <option value="gpt-4.1-mini">gpt-4.1-mini (fast)</option>
+              <option value="gpt-4.1">gpt-4.1 (quality)</option>
+            </select>
           </div>
 
-          <div class="relative flex-1">
-            <textarea id="bulkInput" placeholder="Card 1 text...
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-feather="thermometer" class="w-3.5 h-3.5"></i>
+              Temperature
+            </label>
+            <input id="temp" type="number" step="0.1" min="0" max="2" value="0.2"
+              class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-text">
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-feather="0" class="w-3.5 h-3.5"></i>
+              ~~Insert Card Break~~
+            </label>
+            <button
+              id="autoInsert"
+              type="button"
+              class="mt-2 inline-flex items-center gap-4 px-20 py-2.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all active:scale-95"
+            >
+              ╾╾╾ ◆ ╾╾╾
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Input Section -->
+          <div class="space-y-3 flex flex-col">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <i data-feather="edit-3" class="w-4 h-4 text-primary-600"></i>
+                Bulk Input
+              </label>
+              <span class="text-xs text-slate-400" id="inputStats">0 cards detected</span>
+            </div>
+
+            <div class="relative flex-1">
+              <textarea id="bulkInput" placeholder="Card 1 text...
 
 ===CARD===
 
@@ -153,65 +160,114 @@ Card 2 text...
 ===CARD===
 
 Card 3 text..."
-              class="w-full h-64 lg:h-80 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all placeholder:text-slate-400 cursor-text"></textarea>
+                class="w-full h-64 lg:h-80 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all placeholder:text-slate-400 cursor-text"></textarea>
 
-            <div class="absolute bottom-3 right-3 flex gap-2 pointer-events-auto">
-              <button id="clear" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Clear all">
-                <i data-feather="trash-2" class="w-4 h-4"></i>
+              <div class="absolute bottom-3 right-3 flex gap-2 pointer-events-auto">
+                <button id="clear" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Clear all">
+                  <i data-feather="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <div id="status" class="text-sm text-slate-600 flex items-center gap-2 min-h-[1.5rem]">
+                <span class="text-slate-400">Ready to refine</span>
+              </div>
+              <button id="refineAll"
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                <i data-feather="zap" class="w-4 h-4"></i>
+                Refine All
               </button>
             </div>
+
+            <p class="text-xs text-slate-400">
+              Pro tip: Press
+              <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">Ctrl</kbd> +
+              <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">Enter</kbd>
+              to refine
+            </p>
           </div>
 
-          <div class="flex items-center justify-between pt-2">
-            <div id="status" class="text-sm text-slate-600 flex items-center gap-2 min-h-[1.5rem]">
-              <span class="text-slate-400">Ready to refine</span>
+          <!-- Output Section -->
+          <div class="space-y-3 flex flex-col">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <i data-feather="check-circle" class="w-4 h-4 text-secondary-600"></i>
+                Refined Outputs
+              </label>
+              <div class="flex gap-2">
+                <button id="copyAll" class="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors disabled:opacity-50" disabled>
+                  <i data-feather="copy" class="w-3.5 h-3.5"></i>
+                  Copy All
+                </button>
+                <button id="downloadAll" class="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-50 hover:bg-secondary-100 text-secondary-700 rounded-lg transition-colors disabled:opacity-50" disabled>
+                  <i data-feather="download" class="w-3.5 h-3.5"></i>
+                  Download
+                </button>
+              </div>
             </div>
-            <button id="refineAll"
-              class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
-              <i data-feather="zap" class="w-4 h-4"></i>
-              Refine All
-            </button>
-          </div>
 
-          <p class="text-xs text-slate-400">
-            Pro tip: Press
-            <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">Ctrl</kbd> +
-            <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">Enter</kbd>
-            to refine
-          </p>
+            <div id="outputs" class="flex-1 bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 overflow-y-auto max-h-[24rem] lg:max-h-[32rem] min-h-[16rem]">
+              <div class="flex flex-col items-center justify-center h-full text-slate-400 space-y-2" id="emptyState">
+                <i data-feather="inbox" class="w-12 h-12 opacity-20"></i>
+                <p class="text-sm">No refined cards yet</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Output Section -->
-        <div class="space-y-3 flex flex-col">
-          <div class="flex items-center justify-between">
-            <label class="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <i data-feather="check-circle" class="w-4 h-4 text-secondary-600"></i>
-              Refined Outputs
-            </label>
+      </section>
+
+      <!-- ========================= -->
+      <!-- REWRITER PANEL (NEW UI) -->
+      <!-- ========================= -->
+      <section class="tab-panel hidden" data-panel="rewriter">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-3">
+            <label class="text-sm font-semibold text-slate-700">Input</label>
+            <textarea id="rwInput" placeholder="Paste text to rewrite..."
+              class="w-full h-72 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all"></textarea>
+
             <div class="flex gap-2">
-              <button id="copyAll" class="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors disabled:opacity-50" disabled>
-                <i data-feather="copy" class="w-3.5 h-3.5"></i>
-                Copy All
+              <button id="rwRun"
+              type="button"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-all">
+                Rewrite
               </button>
-              <button id="downloadAll" class="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-50 hover:bg-secondary-100 text-secondary-700 rounded-lg transition-colors disabled:opacity-50" disabled>
-                <i data-feather="download" class="w-3.5 h-3.5"></i>
-                Download
+              <button id="rwClear"
+              type="button"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-all">
+                Clear
               </button>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button class="rwPreset text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg" data-preset="email">Email</button>
+              <button class="rwPreset text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg" data-preset="micro">Micro</button>
+              <button class="rwPreset text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg" data-preset="path">Path</button>
             </div>
           </div>
 
-          <div id="outputs" class="flex-1 bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 overflow-y-auto max-h-[24rem] lg:max-h-[32rem] min-h-[16rem]">
-            <div class="flex flex-col items-center justify-center h-full text-slate-400 space-y-2" id="emptyState">
-              <i data-feather="inbox" class="w-12 h-12 opacity-20"></i>
-              <p class="text-sm">No refined cards yet</p>
-            </div>
+          <div class="space-y-3">
+            <label class="text-sm font-semibold text-slate-700">Output</label>
+            <textarea id="rwOutput" readonly
+              class="w-full h-72 px-4 py-3 bg-white border border-slate-200 rounded-xl font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+              placeholder="Rewritten text will appear here..."></textarea>
+
+            <label class="text-sm font-semibold text-slate-700 mt-2 block">Rules (editable)</label>
+            <textarea id="rwRules"
+              class="w-full h-40 px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+              placeholder="Optional extra rules..."></textarea>
           </div>
         </div>
-      </div>
+
+      </section>
+
     </div>
   </div>
 
-  <!-- Toast Notification -->
+  <!-- Toast Notification (kept) -->
   <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
     <div class="bg-slate-800 text-white px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3">
       <i data-feather="check" class="w-5 h-5 text-secondary-400"></i>
@@ -222,8 +278,31 @@ Card 3 text..."
   <!-- Scripts -->
   <script src="components/output-card.js" defer></script>
   <script src="script.js" defer></script>
+
+  <!-- Tabs script (ONE only) -->
   <script>
-    window.addEventListener("DOMContentLoaded", () => feather.replace());
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.feather) feather.replace();
+
+      const buttons = document.querySelectorAll(".tab-btn");
+      const panels = document.querySelectorAll(".tab-panel");
+
+      function activate(tabName) {
+        panels.forEach(p => p.classList.toggle("hidden", p.dataset.panel !== tabName));
+        buttons.forEach(b => {
+          const isActive = b.dataset.tab === tabName;
+          b.classList.toggle("bg-primary-600", isActive);
+          b.classList.toggle("text-white", isActive);
+          b.classList.toggle("bg-slate-100", !isActive);
+          b.classList.toggle("text-slate-700", !isActive);
+        });
+        if (window.feather) feather.replace();
+      }
+
+      buttons.forEach(btn => btn.addEventListener("click", () => activate(btn.dataset.tab)));
+      activate("refiner");
+    });
   </script>
+
 </body>
 </html>

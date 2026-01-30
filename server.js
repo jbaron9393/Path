@@ -5,10 +5,15 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const k = process.env.OPENAI_API_KEY || "";
+console.log("OPENAI_API_KEY loaded:", k ? "YES" : "NO");
+console.log("OPENAI_API_KEY prefix:", k.slice(0, 7));
+console.log("OPENAI_API_KEY length:", k.length);
+
 
 // ---- app init (must be before app.listen) ----
 const app = express();
@@ -119,7 +124,7 @@ async function callOpenAI({ apiKey, model, temperature, input }) {
 
 app.post("/api/refine", async (req, res) => {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+const apiKey = (process.env.OPENAI_API_KEY || "").trim();
     if (!apiKey) return res.status(500).send("Missing OPENAI_API_KEY environment variable.");
 
     const { text, model = "gpt-4.1-mini", temperature = 0.2, delimiter = "===CARD===" } = req.body || {};
@@ -148,6 +153,79 @@ ${text}
     res.status(500).send(String(e?.message || e));
   }
 });
+
+app.post("/api/rewrite", async (req, res) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).send("Missing OPENAI_API_KEY");
+
+    const {
+      text,
+      model = "gpt-4.1-mini",
+      temperature = 0.2,
+      preset = "email",
+      rules = ""
+    } = req.body || {};
+
+    if (!text) return res.status(400).send("Missing text");
+
+    const BASE = `
+Rewrite the text to be professional, concise, and clear.
+
+Hard rules:
+- Keep meaning identical
+- Do not add facts
+- Fix grammar and flow
+- Remove filler
+- Keep qualifiers
+- Output ONLY rewritten text
+`.trim();
+
+    const PRESETS = {
+      email: `
+Professional email tone.
+Short paragraphs.
+Polite but direct.
+End with clear ask if present.
+      `.trim(),
+
+      micro: `
+Pathology microscopic description style.
+Objective wording.
+Keep positives/negatives.
+Remove redundancy.
+No new interpretation.
+      `.trim(),
+
+      path: `
+Professional pathology description/comment.
+Concise.
+Maintain structure.
+Keep uncertainty qualifiers.
+      `.trim()
+    };
+
+    const input = `
+${BASE}
+
+STYLE:
+${PRESETS[preset] || PRESETS.email}
+
+USER RULES:
+${rules}
+
+TEXT:
+${text}
+`.trim();
+
+    const out = await callOpenAI({ apiKey, model, temperature, input });
+    res.json({ text: out });
+
+  } catch (e) {
+    res.status(500).send(String(e?.message || e));
+  }
+});
+
 
 // ---- LISTEN (must be at bottom, after app is defined) ----
 const PORT = process.env.PORT || 3000;
