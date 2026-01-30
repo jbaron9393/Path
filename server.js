@@ -5,26 +5,47 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Load env vars (.env)
-dotenv.config(); // If you want to suppress dotenv logs: dotenv.config({ quiet: true });
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
-});
-
-
+// ---- app init (must be before app.listen) ----
 const app = express();
 app.use(express.json({ limit: "4mb" }));
+app.use(express.static(__dirname)); // serves cap_cloze_refiner.html, script.js, etc.
 
-// Serve your static files (cap_cloze_refiner.html, script.js, style.css, etc.)
-app.use(express.static(__dirname));
+// ---- password gate (optional but recommended) ----
+const APP_PASSWORD = process.env.APP_PASSWORD;
 
-// Homepage route so http://localhost:3000 works
+function requirePassword(req, res, next) {
+  if (!APP_PASSWORD) return next(); // dev mode if unset
+
+  const auth = req.headers.authorization;
+
+  if (!auth || !auth.startsWith("Basic ")) {
+    res.setHeader("WWW-Authenticate", 'Basic realm="Cloze Refiner"');
+    return res.status(401).send("Password required");
+  }
+
+  const decoded = Buffer.from(auth.split(" ")[1], "base64").toString("utf8");
+  const [, password] = decoded.split(":");
+
+  if (password !== APP_PASSWORD) {
+    res.setHeader("WWW-Authenticate", 'Basic realm="Cloze Refiner"');
+    return res.status(401).send("Wrong password");
+  }
+
+  next();
+}
+
+// Health check should be public for Render (optional)
+app.get("/health", (req, res) => res.status(200).send("ok"));
+
+// Apply auth to everything else
+app.use(requirePassword);
+
+// Homepage
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "cap_cloze_refiner.html"));
 });
@@ -71,21 +92,6 @@ IMPORTANT
 - Do NOT explain unless asked.
 `.trim();
 
-// --- Cloze length validator (hard enforcement) ---
-function findTooLongClozes(text, maxWords = 3) {
-  const re = /\{\{c\d+::(.*?)\}\}/g;
-  const bad = [];
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const inside = (m[1] || "").trim();
-    const words = inside.split(/\s+/).filter(Boolean);
-    if (words.length > maxWords) {
-      bad.push({ inside, words: words.length });
-    }
-  }
-  return bad;
-}
-
 async function callOpenAI({ apiKey, model, temperature, input }) {
   const r = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -116,30 +122,13 @@ app.post("/api/refine", async (req, res) => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).send("Missing OPENAI_API_KEY environment variable.");
 
-    const {
-      text,
-      model = "gpt-4.1-mini",
-      temperature = 0.2,
-      delimiter = "===CARD===",
-    } = req.body || {};
-
+    const { text, model = "gpt-4.1-mini", temperature = 0.2, delimiter = "===CARD===" } = req.body || {};
     if (!text || typeof text !== "string") return res.status(400).send("Missing 'text'.");
 
     const d = String(delimiter || "===CARD===");
 
-    // Extra hard-check instruction to improve compliance
-    const HARD_CHECK = `
-FINAL HARD CHECK (must pass)
-- Every cloze deletion {{cN::...}} must contain ONLY 1–3 words.
-- If any cloze contains 4+ words, rewrite it into multiple clozes of 1–3 words each OR remove clozing for that phrase.
-- Do not output until this check passes.
-- Do not include triple backticks. Output plain text only.
-`.trim();
-
-    const prompt = `
+    const input = `
 ${RULES}
-
-${HARD_CHECK}
 
 BATCH MODE INSTRUCTIONS
 - The user input may contain multiple cards separated by the delimiter: ${d}
@@ -153,40 +142,16 @@ USER INPUT:
 ${text}
 `.trim();
 
-    // First attempt
-    let out = await callOpenAI({ apiKey, model, temperature, input: prompt });
-
-    // Strip any accidental fences (defensive)
-    out = (out || "").replace(/```/g, "").trim();
-
-    // Validate cloze word-count, retry once with strict fix prompt if needed
-    const bad = findTooLongClozes(out, 3);
-    if (bad.length) {
-      const fixPrompt = `
-You violated a hard rule: each cloze deletion {{cN::...}} must be 1–3 words ONLY.
-
-Fix ONLY the cloze lengths in the text below.
-- Keep everything else identical (wording, order, delimiter ${d}, headers).
-- Do not add new information.
-- Do not add explanations.
-- Do not add triple backticks.
-
-TEXT TO FIX:
-${out}
-`.trim();
-
-      out = await callOpenAI({ apiKey, model, temperature: 0.0, input: fixPrompt });
-      out = (out || "").replace(/```/g, "").trim();
-    }
-
+    const out = await callOpenAI({ apiKey, model, temperature, input });
     res.json({ text: out });
   } catch (e) {
     res.status(500).send(String(e?.message || e));
   }
 });
 
+// ---- LISTEN (must be at bottom, after app is defined) ----
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  // Optional: auto-open browser to homepage
-  import("open").then((o) => o.default(`http://localhost:${PORT}/`));
+  console.log(`Server running on port ${PORT}`);
 });
