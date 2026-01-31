@@ -127,11 +127,12 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: raw,
-          model: modelEl.value,
-          temperature: Number(tempEl.value),
-          delimiter: getDelimiter(),
-        }),
+  text: raw,
+  model: modelEl.value,
+  temperature: Number(tempEl.value),
+  delimiter: getDelimiter(),
+  extraRules: document.getElementById("extraRules")?.value || ""
+}),
       });
       
 
