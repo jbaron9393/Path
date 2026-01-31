@@ -1,4 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // ============================
+  // CLOZE REFINER TAB WIRING
+  // ============================
   const bulkInput = document.getElementById("bulkInput");
   const outputs = document.getElementById("outputs");
   const emptyState = document.getElementById("emptyState");
@@ -94,6 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tag.textContent = `Card ${idx + 1}`;
 
       const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
       copyBtn.className =
         "text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors";
       copyBtn.textContent = "Copy";
@@ -135,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
           model: modelEl.value,
           temperature: Number(tempEl.value),
           delimiter: getDelimiter(),
-          extraRules: extraRulesEl?.value || "", // ✅ THIS is the override box
+          extraRules: extraRulesEl?.value || "",
         }),
       });
 
@@ -237,21 +241,24 @@ document.addEventListener("DOMContentLoaded", () => {
   setStatus("Ready to refine");
 
   // ============================
-  // REWRITER TAB WIRING
+  // REWRITER TAB WIRING (UPDATED)
   // ============================
-  let rwPreset = "email";
+  let rwPreset = "general";
 
   const ACTIVE_COLORS = {
-  email: ["bg-primary-600", "text-white"],
-  micro: ["bg-secondary-600", "text-white"],
-  path: ["bg-purple-600", "text-white"]
-};
+    general: ["bg-slate-900", "text-white", "border", "border-slate-900", "shadow-sm"],
+    email: ["bg-primary-600", "text-white", "border", "border-primary-600", "shadow-sm"],
+    micro: ["bg-secondary-600", "text-white", "border", "border-secondary-600", "shadow-sm"],
+    path: ["bg-purple-600", "text-white", "border", "border-purple-600", "shadow-sm"],
+  };
 
-const INACTIVE_COLORS = [
-  "bg-slate-100",
-  "text-slate-700",
-  "hover:bg-slate-200"
-];
+  const INACTIVE_COLORS = [
+    "bg-white/70",
+    "text-slate-700",
+    "border",
+    "border-slate-200",
+    "shadow-sm",
+  ];
 
   const rwInput = document.getElementById("rwInput");
   const rwOutput = document.getElementById("rwOutput");
@@ -259,64 +266,140 @@ const INACTIVE_COLORS = [
   const rwClear = document.getElementById("rwClear");
   const rwRules = document.getElementById("rwRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
+  const rwCopy = document.getElementById("rwCopy");
 
-  // If the rewriter panel isn't on this page, don't crash.
-  if (rwInput && rwOutput && rwRun && rwClear && rwRules) {
-    if (!rwRules.value.trim()) {
-      rwRules.value = `- Keep meaning identical
+  if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
+    // Preserve each preset button's original classes (padding/rounded/etc.)
+    // IMPORTANT: remove hover:bg-* from the HTML base classes, and control hover in CSS.
+    rwPresetBtns.forEach((btn) => {
+      btn.dataset.baseClass = btn.className;
+      btn.setAttribute("type", "button");
+      btn.setAttribute("aria-pressed", "false"); // used by CSS to distinguish active/inactive hover
+    });
+
+    const DEFAULT_RULES = `- Keep meaning identical
 - Remove filler
 - Keep qualifiers (e.g., focal, patchy, cannot exclude)
 - No new facts`;
+
+    function setPlaceholdersForPreset(preset) {
+      if (preset === "general") {
+        rwInput.placeholder =
+          "Ask anything or paste text — you’ll get a succinct answer/summary.";
+        rwRules.placeholder =
+          "Optional: constraints (tone, bullets, length, style). Leave empty for default succinct answers.";
+      } else {
+        rwInput.placeholder = "Paste text to rewrite…";
+        rwRules.placeholder = "Rules (auto-filled if empty for this preset)";
+      }
     }
 
-rwPresetBtns.forEach((btn) => {
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    rwPreset = btn.dataset.preset || "email";
+    function applyRulesForPreset(preset) {
+      if (preset === "general") return;
+      if (!rwRules.value.trim()) rwRules.value = DEFAULT_RULES;
+    }
 
-    rwPresetBtns.forEach((b) => {
-      b.classList.remove(
-        "bg-primary-600",
-        "text-white"
-      );
-      b.classList.add(
-        "bg-slate-100",
-        "text-slate-700",
-        "hover:bg-slate-200"
-      );
+    function setRunButtonLabel(preset) {
+      rwRun.textContent = preset === "general" ? "Send ➜" : "Refine ✨";
+    }
+
+    function setPresetActive(preset) {
+      // mark all inactive for CSS hover rule
+      rwPresetBtns.forEach((b) => b.setAttribute("aria-pressed", "false"));
+
+      // reset buttons
+      rwPresetBtns.forEach((b) => {
+        b.className = b.dataset.baseClass || b.className;
+        b.classList.add(...INACTIVE_COLORS);
+      });
+
+      // activate selected
+      const activeBtn = document.querySelector(`.rwPreset[data-preset="${preset}"]`);
+      if (activeBtn) {
+        activeBtn.setAttribute("aria-pressed", "true");
+        activeBtn.className = activeBtn.dataset.baseClass || activeBtn.className;
+        activeBtn.classList.add(...(ACTIVE_COLORS[preset] || ACTIVE_COLORS.general));
+      }
+    }
+
+    // Enter = submit, Ctrl/Cmd + Enter = newline
+    rwInput.addEventListener("keydown", (e) => {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl/Cmd + Enter → newline
+      if (isCmdOrCtrl && e.key === "Enter") {
+        e.preventDefault();
+        const start = rwInput.selectionStart ?? rwInput.value.length;
+        const end = rwInput.selectionEnd ?? rwInput.value.length;
+        rwInput.value = rwInput.value.slice(0, start) + "\n" + rwInput.value.slice(end);
+        rwInput.selectionStart = rwInput.selectionEnd = start + 1;
+        return;
+      }
+
+      // Enter alone → submit
+      if (!isCmdOrCtrl && e.key === "Enter") {
+        e.preventDefault();
+        rwRun.click();
+      }
     });
 
-    btn.classList.remove(
-      "bg-slate-100",
-      "text-slate-700",
-      "hover:bg-slate-200"
-    );
-    btn.classList.add(
-      "bg-primary-600",
-      "text-white"
-    );
+    // Copy output
+    rwCopy.disabled = true;
+    const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
-    setStatus(`Rewriter mode: ${rwPreset}`);
-  });
-});
+    rwCopy.addEventListener("click", async () => {
+      const text = (rwOutput.value || "").trim();
+      if (!text) return;
 
+      try {
+        await navigator.clipboard.writeText(text);
+        rwCopy.textContent = "Copied!";
+        rwCopy.className = rwCopyOriginal.className + " bg-green-500 text-white";
+        setStatus("Copied output to clipboard.");
 
+        setTimeout(() => {
+          rwCopy.textContent = rwCopyOriginal.text;
+          rwCopy.className = rwCopyOriginal.className;
+        }, 350);
+      } catch (err) {
+        console.error("Copy failed:", err);
+        setStatus("Copy failed.");
+      }
+    });
+
+    // Preset buttons
+    rwPresetBtns.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        rwPreset = btn.dataset.preset || "general";
+
+        setPresetActive(rwPreset);
+        applyRulesForPreset(rwPreset);
+        setPlaceholdersForPreset(rwPreset);
+        setRunButtonLabel(rwPreset);
+
+        setStatus(`Rewriter mode: ${rwPreset}`);
+      });
+    });
+
+    // Clear
     rwClear.addEventListener("click", (e) => {
       e.preventDefault();
       rwInput.value = "";
       rwOutput.value = "";
+      rwCopy.disabled = true;
       setStatus("Cleared rewriter.");
       rwInput.focus();
     });
 
+    // Run
     rwRun.addEventListener("click", async (e) => {
       e.preventDefault();
-
       const text = (rwInput.value || "").trim();
-      if (!text) return setStatus("Paste text to rewrite first.");
+      if (!text) return setStatus("Type a question or paste text first.");
 
       rwRun.disabled = true;
-      setStatus("Rewriting…");
+      setStatus(rwPreset === "general" ? "Thinking…" : "Rewriting…");
 
       try {
         const res = await fetch("/api/rewrite", {
@@ -337,7 +420,8 @@ rwPresetBtns.forEach((btn) => {
 
         const j = JSON.parse(bodyText);
         rwOutput.value = (j.text ?? "").trim();
-        setStatus("Done — rewritten.");
+        rwCopy.disabled = !rwOutput.value.trim();
+        setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
         setStatus("Rewriter error: " + (err?.message || String(err)));
@@ -346,18 +430,12 @@ rwPresetBtns.forEach((btn) => {
       }
     });
 
-const first = document.querySelector('.rwPreset[data-preset="email"]');
-if (first) {
-  first.classList.remove(
-    "bg-slate-100",
-    "text-slate-700",
-    "hover:bg-slate-200"
-  );
-  first.classList.add(
-    "bg-primary-600",
-    "text-white"
-  );
-}
-
+    // Default preset on load
+    setPresetActive("general");
+    applyRulesForPreset("general");
+    setPlaceholdersForPreset("general");
+    setRunButtonLabel("general");
+  } else {
+    console.warn("Rewriter wiring skipped: missing elements or preset buttons not found.");
   }
 });

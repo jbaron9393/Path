@@ -246,6 +246,30 @@ async function callOpenAI({ apiKey, model, temperature, input }) {
   );
 }
 
+async function callOpenAIChat({ apiKey, model, temperature, system, user }) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature,
+      messages: [
+        { role: "system", content: String(system || "").trim() },
+        { role: "user", content: String(user || "").trim() },
+      ],
+    }),
+  });
+
+  const text = await r.text();
+  if (!r.ok) throw new Error(text);
+
+  const j = JSON.parse(text);
+  return (j.choices?.[0]?.message?.content || "").trim();
+}
+
 function splitByDelimiter(raw, delimiter = "===CARD===") {
   const d = String(delimiter || "===CARD===");
   return String(raw || "")
@@ -333,6 +357,29 @@ ${rawText}
     // ✅ Call OpenAI ONCE
     const out = await callOpenAI({ apiKey, model, temperature, input });
 
+    let finalOut = out || "";
+
+// If the model output looks like it re-asked the question, force a second pass.
+// (Common failure mode: returns a paraphrased question ending in '?')
+const outTrim = finalOut.trim();
+if (preset === "general" && outTrim.endsWith("?")) {
+  const retryInput = `
+Return ONLY the final answer to the user's input.
+Do NOT restate or rephrase the question.
+No punctuation unless needed.
+
+USER INPUT:
+${chunks.join("\n\n")}
+`.trim();
+
+  finalOut = await callOpenAI({
+    apiKey,
+    model,
+    temperature: 0, // force deterministic
+    input: retryInput
+  });
+}
+
     // ✅ If Extra Rules is present: return RAW model output, no server enforcement
     if (extra) {
       return res.json({ text: out });
@@ -350,8 +397,7 @@ ${rawText}
   }
 });
 
-
-// --------- REWRITE (EMAIL/MICRO/PATH) ---------
+// --------- REWRITE (GENERAL/EMAIL/MICRO/PATH) ---------
 app.post("/api/rewrite", async (req, res) => {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || "").trim();
@@ -361,7 +407,7 @@ app.post("/api/rewrite", async (req, res) => {
       text,
       model = "gpt-4.1-mini",
       temperature = 0.2,
-      preset = "email",
+      preset = "general",
       rules = "",
       delimiter = "" // optional; empty means "single block"
     } = req.body || {};
@@ -371,7 +417,14 @@ app.post("/api/rewrite", async (req, res) => {
     const userRules = String(rules || "").trim();
     const d = String(delimiter || "").trim();
 
-    const BASE = `
+    // If delimiter provided, treat as multi-chunk; else single text block
+    const chunks = d ? splitByDelimiter(text, d) : [text.trim()];
+    if (!chunks[0]) return res.status(400).send("Empty text after trimming.");
+
+    // =======================
+    // DEFAULTS
+    // =======================
+    const BASE_REWRITE = `
 Rewrite the text to be professional, concise, and clear.
 
 Hard rules:
@@ -384,6 +437,20 @@ Hard rules:
 `.trim();
 
     const PRESETS = {
+general: `
+You are a helpful assistant.
+
+CRITICAL OUTPUT RULES:
+- If the input is a question, output ONLY the final answer.
+- Do NOT restate or rephrase the question, uless it helps with clarity.
+- Do NOT ask follow-up questions.
+- No preface, no commentary.
+
+If the input is pasted content/notes (not a question):
+- Summarize the key points succinctly.
+- Be personable, yet professional
+`.trim(),
+
       email: `
 Professional email tone.
 Short paragraphs.
@@ -407,16 +474,79 @@ Keep uncertainty qualifiers.
 `.trim()
     };
 
-    // If delimiter provided, treat as multi-chunk rewrite; else single text rewrite
-    const chunks = d ? splitByDelimiter(text, d) : [text.trim()];
-    if (!chunks[0]) return res.status(400).send("Empty text after trimming.");
-
     let input = "";
 
     // =======================
-    // OVERRIDE MODE
+    // GENERAL MODE (Q/A or SUMMARY)
+    // =======================
+if (String(preset).toLowerCase() === "general") {
+  // Build system prompt (rules)
+  const system = userRules
+    ? `You are a helpful assistant.
+
+ABSOLUTE OVERRIDE MODE:
+- Follow ONLY the user's rules below. They override all other instructions.
+- Answer questions and/or summarize content as required by the user's rules.
+- Do NOT invent real-world factual claims (dates, diagnoses, lab values, people, institutions) not present in the input.
+- Output ONLY the answer/summary (no preface, no commentary, no quotes).
+
+USER RULES:
+${userRules}`.trim()
+    : PRESETS.general;
+
+  // User content
+  const user = chunks.join("\n\n");
+
+  // First pass (temperature 0 for "queue" behavior)
+  let finalOut = await callOpenAIChat({
+    apiKey,
+    model,
+    temperature: 0,
+    system,
+    user,
+  });
+
+  finalOut = String(finalOut || "").trim();
+
+  // If it re-asks the question, force a second pass
+  if (finalOut.endsWith("?")) {
+    finalOut = await callOpenAIChat({
+      apiKey,
+      model,
+      temperature: 0,
+      system: "Return ONLY the final answer. Do NOT restate or rephrase the question.",
+      user,
+    });
+    finalOut = String(finalOut || "").trim();
+  }
+
+  // Single block mode
+  if (!d) return res.json({ text: finalOut });
+
+  // Delimiter mode (must split finalOut)
+  const outChunks = splitByDelimiter(finalOut, d);
+
+  if (outChunks.length !== chunks.length) {
+    console.log("general chunk mismatch", {
+      inChunks: chunks.length,
+      outChunks: outChunks.length,
+      delimiter: d,
+    });
+    return res.json({
+      text: finalOut,
+      warning: `Model returned ${outChunks.length} chunk(s) but expected ${chunks.length}.`,
+    });
+  }
+
+  const fixed = joinByDelimiter(outChunks, d);
+  return res.json({ text: fixed });
+}
+
+    // =======================
+    // REWRITE MODE (EMAIL/MICRO/PATH)
     // =======================
     if (userRules) {
+      // OVERRIDE MODE (rewrite)
       input = `
 You are rewriting text.
 
@@ -442,11 +572,9 @@ TEXT CHUNKS:
 ${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
 `.trim();
     } else {
-      // =======================
-      // NORMAL MODE
-      // =======================
+      // NORMAL MODE (rewrite)
       input = `
-${BASE}
+${BASE_REWRITE}
 
 STYLE:
 ${PRESETS[preset] || PRESETS.email}
@@ -464,11 +592,28 @@ ${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
 
     const out = await callOpenAI({ apiKey, model, temperature, input });
 
+    let finalOut = String(out || "").trim();
+
+// If the model re-asks the question (common failure), force a second pass
+if (finalOut.endsWith("?")) {
+  const retryInput = `
+Return ONLY the final answer to the user's input.
+Do NOT restate or rephrase the question.
+No preface.
+
+USER INPUT:
+${chunks.join("\n\n")}
+`.trim();
+
+  finalOut = String(
+    await callOpenAI({ apiKey, model, temperature: 0, input: retryInput })
+  ).trim();
+}
     // If single chunk mode, just return raw out
     if (!d) return res.json({ text: out });
 
     // If delimiter mode, enforce chunk count/order server-side
-    const outChunks = splitByDelimiter(out, d);
+    const outChunks = splitByDelimiter(finalOut, d);
 
     if (outChunks.length !== chunks.length) {
       console.log("rewrite chunk mismatch", {
@@ -488,8 +633,6 @@ ${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
     res.status(500).send(String(e?.message || e));
   }
 });
-
-
 
 // ---- LISTEN ----
 const PORT = process.env.PORT || 3000;
