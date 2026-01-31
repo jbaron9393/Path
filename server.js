@@ -246,29 +246,76 @@ async function callOpenAI({ apiKey, model, temperature, input }) {
   );
 }
 
+function splitByDelimiter(raw, delimiter = "===CARD===") {
+  const d = String(delimiter || "===CARD===");
+  return String(raw || "")
+    .split(d)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+function joinByDelimiter(parts, delimiter = "===CARD===") {
+  const d = String(delimiter || "===CARD===");
+  return parts.join(`\n${d}\n`);
+}
+
+
+
 // --------- REFINE (CLOZE) ---------
 app.post("/api/refine", async (req, res) => {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || "").trim();
     if (!apiKey) return res.status(500).send("Missing OPENAI_API_KEY environment variable.");
 
-    const { 
-  text, 
-  model = "gpt-4.1-mini", 
-  temperature = 0.2, 
-  delimiter = "===CARD===",
-  extraRules = ""
-} = req.body || {};
+    const {
+      text,
+      model = "gpt-4.1-mini",
+      temperature = 0.2,
+      delimiter = "===CARD===",
+      extraRules = ""
+    } = req.body || {};
 
-    if (!text || typeof text !== "string") return res.status(400).send("Missing 'text'.");
+    const rawText = String(text || "").trim();
+    if (!rawText) return res.status(400).send("Missing 'text'.");
 
     const d = String(delimiter || "===CARD===");
+    const extra = String(extraRules || "").trim();
 
-    const input = `
+    let input = "";
+
+    // =======================
+    // OVERRIDE MODE
+    // =======================
+    if (extra) {
+      input = `
+You are editing Anki cloze cards.
+
+ABSOLUTE OVERRIDE MODE:
+- Ignore ANY default/base rules.
+- Follow ONLY the user's Extra Cloze Rules below.
+- You MUST comply with them.
+- If the user requests a specific number of clozes, you MUST produce exactly that many clozes PER CARD.
+- Do NOT invent facts.
+- Keep the original text content; only add/adjust cloze wrappers.
+
+Batch rules:
+- Input may contain multiple cards separated by delimiter: ${d}
+- Return same number of cards, same order
+- Output MUST use the SAME delimiter (${d}) between cards
+- Output ONLY the cards (no commentary)
+
+USER EXTRA RULES:
+${extra}
+
+USER INPUT:
+${rawText}
+`.trim();
+    } else {
+      // =======================
+      // NORMAL STRICT MODE
+      // =======================
+      input = `
 ${RULES}
-
-USER EXTRA RULES (optional):
-${extraRules}
 
 BATCH MODE INSTRUCTIONS
 - The user input may contain multiple cards separated by the delimiter: ${d}
@@ -279,30 +326,30 @@ BATCH MODE INSTRUCTIONS
 - Do not add any extra commentary outside the copy windows.
 
 USER INPUT:
-${text}
+${rawText}
 `.trim();
+    }
 
+    // ✅ Call OpenAI ONCE
     const out = await callOpenAI({ apiKey, model, temperature, input });
 
-let fixed = out;
+    // ✅ If Extra Rules is present: return RAW model output, no server enforcement
+    if (extra) {
+      return res.json({ text: out });
+    }
 
-// 1) If input already had clozes, prevent adding NEW cloze numbers
-fixed = capClozesToInput(fixed, text, d);
+    // ✅ Normal strict enforcement
+    let fixed = out;
+    fixed = capClozesToInput(fixed, rawText, d);
+    fixed = enforceClozeWordLimit(fixed, 3);
+    fixed = renumberClozesPerCard(fixed, d);
 
-// 2) Enforce 1–3 words (your current version)
-fixed = enforceClozeWordLimit(fixed, 3);
-
-// 3) Renumber sequentially within each card
-fixed = renumberClozesPerCard(fixed, d);
-
-res.json({ text: fixed });
-
-
-
+    return res.json({ text: fixed });
   } catch (e) {
-    res.status(500).send(String(e?.message || e));
+    return res.status(500).send(String(e?.message || e));
   }
 });
+
 
 // --------- REWRITE (EMAIL/MICRO/PATH) ---------
 app.post("/api/rewrite", async (req, res) => {
@@ -315,10 +362,14 @@ app.post("/api/rewrite", async (req, res) => {
       model = "gpt-4.1-mini",
       temperature = 0.2,
       preset = "email",
-      rules = ""
+      rules = "",
+      delimiter = "" // optional; empty means "single block"
     } = req.body || {};
 
     if (!text || typeof text !== "string") return res.status(400).send("Missing text");
+
+    const userRules = String(rules || "").trim();
+    const d = String(delimiter || "").trim();
 
     const BASE = `
 Rewrite the text to be professional, concise, and clear.
@@ -356,27 +407,89 @@ Keep uncertainty qualifiers.
 `.trim()
     };
 
-    const input = `
+    // If delimiter provided, treat as multi-chunk rewrite; else single text rewrite
+    const chunks = d ? splitByDelimiter(text, d) : [text.trim()];
+    if (!chunks[0]) return res.status(400).send("Empty text after trimming.");
+
+    let input = "";
+
+    // =======================
+    // OVERRIDE MODE
+    // =======================
+    if (userRules) {
+      input = `
+You are rewriting text.
+
+ABSOLUTE OVERRIDE MODE:
+- Follow ONLY the user's rules below. They override all other instructions.
+- You MAY rewrite aggressively if required to satisfy the user's rules.
+- Do NOT introduce real-world factual claims (dates, diagnoses, lab values, people, institutions) that were not present in the input.
+- If the input is nonsense/gibberish and the user's rules require coherence, you may replace it with a neutral coherent rewrite rather than echoing gibberish.
+
+BATCH RULES:
+- There are ${chunks.length} chunk(s).
+- Rewrite each chunk independently.
+- Return the same number of chunks in the same order.
+${d ? `- Separate chunks with this exact delimiter: ${d}` : ""}
+
+OUTPUT RULES:
+- Output ONLY the rewritten text (no commentary, no preface, no quotes).
+
+USER RULES:
+${userRules}
+
+TEXT CHUNKS:
+${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
+`.trim();
+    } else {
+      // =======================
+      // NORMAL MODE
+      // =======================
+      input = `
 ${BASE}
 
 STYLE:
 ${PRESETS[preset] || PRESETS.email}
 
-USER RULES (optional):
-${rules}
+BATCH RULES:
+- There are ${chunks.length} chunk(s).
+- Rewrite each chunk independently.
+- Return the same number of chunks in the same order.
+${d ? `- Separate chunks with this exact delimiter: ${d}` : ""}
 
-TEXT:
-${text}
+TEXT CHUNKS:
+${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
 `.trim();
+    }
 
     const out = await callOpenAI({ apiKey, model, temperature, input });
 
-    // IMPORTANT: do NOT run cloze limiter here
-    res.json({ text: out });
+    // If single chunk mode, just return raw out
+    if (!d) return res.json({ text: out });
+
+    // If delimiter mode, enforce chunk count/order server-side
+    const outChunks = splitByDelimiter(out, d);
+
+    if (outChunks.length !== chunks.length) {
+      console.log("rewrite chunk mismatch", {
+        inChunks: chunks.length,
+        outChunks: outChunks.length,
+        delimiter: d
+      });
+      return res.json({
+        text: out,
+        warning: `Model returned ${outChunks.length} chunk(s) but expected ${chunks.length}.`
+      });
+    }
+
+    const fixed = joinByDelimiter(outChunks, d);
+    return res.json({ text: fixed });
   } catch (e) {
     res.status(500).send(String(e?.message || e));
   }
 });
+
+
 
 // ---- LISTEN ----
 const PORT = process.env.PORT || 3000;

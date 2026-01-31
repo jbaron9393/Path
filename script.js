@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const copyAllBtn = document.getElementById("copyAll");
   const downloadAllBtn = document.getElementById("downloadAll");
 
+  const extraRulesEl = document.getElementById("extraRules"); // optional box
+
   // ---- hard fails (prevents "nothing happens") ----
   const required = [
     ["bulkInput", bulkInput],
@@ -41,7 +43,6 @@ document.addEventListener("DOMContentLoaded", () => {
     statusEl.innerHTML = `<span class="text-slate-600">${text || ""}</span>`;
   }
 
-  // Hard-coded delimiter now (since you removed the UI box)
   function getDelimiter() {
     return "===CARD===";
   }
@@ -54,7 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const d = getDelimiter();
     return stripCodeFences(text)
       .split(d)
-      .map(x => x.trim())
+      .map((x) => x.trim())
       .filter(Boolean);
   }
 
@@ -88,11 +89,13 @@ document.addEventListener("DOMContentLoaded", () => {
       top.className = "flex items-center justify-between mb-2";
 
       const tag = document.createElement("div");
-      tag.className = "text-xs font-semibold px-2.5 py-1 rounded-full bg-primary-50 text-primary-700";
+      tag.className =
+        "text-xs font-semibold px-2.5 py-1 rounded-full bg-primary-50 text-primary-700";
       tag.textContent = `Card ${idx + 1}`;
 
       const copyBtn = document.createElement("button");
-      copyBtn.className = "text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors";
+      copyBtn.className =
+        "text-xs inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors";
       copyBtn.textContent = "Copy";
       copyBtn.onclick = async () => {
         await navigator.clipboard.writeText(text);
@@ -100,7 +103,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       const pre = document.createElement("pre");
-      pre.className = "whitespace-pre-wrap font-mono text-sm leading-relaxed text-slate-800";
+      pre.className =
+        "whitespace-pre-wrap font-mono text-sm leading-relaxed text-slate-800";
       pre.textContent = text;
 
       top.appendChild(tag);
@@ -127,14 +131,13 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-  text: raw,
-  model: modelEl.value,
-  temperature: Number(tempEl.value),
-  delimiter: getDelimiter(),
-  extraRules: document.getElementById("extraRules")?.value || ""
-}),
+          text: raw,
+          model: modelEl.value,
+          temperature: Number(tempEl.value),
+          delimiter: getDelimiter(),
+          extraRules: extraRulesEl?.value || "", // ✅ THIS is the override box
+        }),
       });
-      
 
       const bodyText = await res.text();
       if (!res.ok) throw new Error(bodyText);
@@ -173,12 +176,10 @@ document.addEventListener("DOMContentLoaded", () => {
     refineAll();
   });
 
-  // Ctrl+Enter shortcut
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "Enter") refineAll();
   });
 
-  // Insert delimiter button
   autoInsertBtn.addEventListener("click", (e) => {
     e.preventDefault();
 
@@ -189,9 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const end = bulkInput.selectionEnd ?? bulkInput.value.length;
 
     bulkInput.value =
-      bulkInput.value.slice(0, start) +
-      insert +
-      bulkInput.value.slice(end);
+      bulkInput.value.slice(0, start) + insert + bulkInput.value.slice(end);
 
     const pos = start + insert.length;
     bulkInput.focus();
@@ -200,9 +199,10 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshStats();
   });
 
-  // Copy/Download all
   copyAllBtn.addEventListener("click", async () => {
-    const blocks = Array.from(outputs.querySelectorAll("pre")).map(p => p.textContent);
+    const blocks = Array.from(outputs.querySelectorAll("pre")).map(
+      (p) => p.textContent
+    );
     if (!blocks.length) return setStatus("Nothing to copy.");
 
     const d = getDelimiter();
@@ -211,11 +211,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   downloadAllBtn.addEventListener("click", () => {
-    const blocks = Array.from(outputs.querySelectorAll("pre")).map(p => p.textContent);
+    const blocks = Array.from(outputs.querySelectorAll("pre")).map(
+      (p) => p.textContent
+    );
     if (!blocks.length) return setStatus("Nothing to download.");
 
     const d = getDelimiter();
-    const blob = new Blob([blocks.join("\n\n" + d + "\n\n")], { type: "text/plain" });
+    const blob = new Blob([blocks.join("\n\n" + d + "\n\n")], {
+      type: "text/plain",
+    });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -229,13 +233,25 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus("Downloaded refined_cards.txt");
   });
 
-  // default state
   setActionsEnabled(false);
   setStatus("Ready to refine");
-    // ============================
+
+  // ============================
   // REWRITER TAB WIRING
   // ============================
   let rwPreset = "email";
+
+  const ACTIVE_COLORS = {
+  email: ["bg-primary-600", "text-white"],
+  micro: ["bg-secondary-600", "text-white"],
+  path: ["bg-purple-600", "text-white"]
+};
+
+const INACTIVE_COLORS = [
+  "bg-slate-100",
+  "text-slate-700",
+  "hover:bg-slate-200"
+];
 
   const rwInput = document.getElementById("rwInput");
   const rwOutput = document.getElementById("rwOutput");
@@ -246,26 +262,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // If the rewriter panel isn't on this page, don't crash.
   if (rwInput && rwOutput && rwRun && rwClear && rwRules) {
-    // Optional: default rules text (edit as you like)
     if (!rwRules.value.trim()) {
-      rwRules.value =
-`- Keep meaning identical
+      rwRules.value = `- Keep meaning identical
 - Remove filler
 - Keep qualifiers (e.g., focal, patchy, cannot exclude)
 - No new facts`;
     }
 
-    rwPresetBtns.forEach((b) => {
-      b.addEventListener("click", (e) => {
-        e.preventDefault();
-        rwPreset = b.dataset.preset || "email";
+rwPresetBtns.forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    rwPreset = btn.dataset.preset || "email";
 
-        // UI feedback: highlight active preset
-        rwPresetBtns.forEach(x => x.classList.remove("bg-primary-600", "text-white"));
-        b.classList.add("bg-primary-600", "text-white");
-        setStatus(`Rewriter mode: ${rwPreset}`);
-      });
+    rwPresetBtns.forEach((b) => {
+      b.classList.remove(
+        "bg-primary-600",
+        "text-white"
+      );
+      b.classList.add(
+        "bg-slate-100",
+        "text-slate-700",
+        "hover:bg-slate-200"
+      );
     });
+
+    btn.classList.remove(
+      "bg-slate-100",
+      "text-slate-700",
+      "hover:bg-slate-200"
+    );
+    btn.classList.add(
+      "bg-primary-600",
+      "text-white"
+    );
+
+    setStatus(`Rewriter mode: ${rwPreset}`);
+  });
+});
+
 
     rwClear.addEventListener("click", (e) => {
       e.preventDefault();
@@ -294,7 +328,7 @@ document.addEventListener("DOMContentLoaded", () => {
             model: modelEl?.value || "gpt-4.1-mini",
             temperature: Number(tempEl?.value) || 0.2,
             preset: rwPreset,
-            rules: rwRules.value || ""
+            rules: rwRules.value || "",
           }),
         });
 
@@ -312,47 +346,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Default active preset highlight
-    const first = document.querySelector('.rwPreset[data-preset="email"]');
-    if (first) first.classList.add("bg-primary-600", "text-white");
+const first = document.querySelector('.rwPreset[data-preset="email"]');
+if (first) {
+  first.classList.remove(
+    "bg-slate-100",
+    "text-slate-700",
+    "hover:bg-slate-200"
+  );
+  first.classList.add(
+    "bg-primary-600",
+    "text-white"
+  );
+}
+
   }
-
 });
-let rwPreset = "email";
-
-const rwInput = document.getElementById("rwInput");
-const rwOutput = document.getElementById("rwOutput");
-const rwRun = document.getElementById("rwRun");
-const rwClear = document.getElementById("rwClear");
-const rwRules = document.getElementById("rwRules");
-
-document.querySelectorAll(".rwPreset").forEach(b=>{
-  b.onclick=()=> rwPreset=b.dataset.preset;
-});
-
-rwClear.onclick = () => {
-  rwInput.value="";
-  rwOutput.value="";
-};
-
-rwRun.onclick = async () => {
-  if(!rwInput.value.trim()) return;
-
-const res = await fetch("/api/refine", {
-  method: "POST",
-  credentials: "include",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    text: raw,
-    model: modelEl.value,
-    temperature: Number(tempEl.value),
-    delimiter: getDelimiter(),
-  }),
-});
-
-
-  const t = await res.text();
-  if(!res.ok) return alert(t);
-
-  rwOutput.value = JSON.parse(t).text;
-};
