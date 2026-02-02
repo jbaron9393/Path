@@ -87,8 +87,6 @@ IF INPUT ALREADY HAS CLOZES
 - Preserve all existing cloze blocks (do not delete them).
 - If an existing cloze block is too long, shorten the clozed text to a 1–3 word anchor (e.g., "hypnozoite", "Schuffner's dots", "48 hours") while keeping the surrounding sentence intact.
 
-
-
 CLOZE NUMBERING (HARD RULE)
 - Within EACH card, cloze numbers MUST start at c1 and be sequential with NO gaps (c1, c2, c3, ...).
 - If the input already contains clozes with higher numbers (e.g., c5, c6, c8), you MUST renumber that card so clozes become c1..cN in the order they appear.
@@ -359,27 +357,6 @@ ${rawText}
 
     let finalOut = out || "";
 
-// If the model output looks like it re-asked the question, force a second pass.
-// (Common failure mode: returns a paraphrased question ending in '?')
-const outTrim = finalOut.trim();
-if (preset === "general" && outTrim.endsWith("?")) {
-  const retryInput = `
-Return ONLY the final answer to the user's input.
-Do NOT restate or rephrase the question.
-No punctuation unless needed.
-
-USER INPUT:
-${chunks.join("\n\n")}
-`.trim();
-
-  finalOut = await callOpenAI({
-    apiKey,
-    model,
-    temperature: 0, // force deterministic
-    input: retryInput
-  });
-}
-
     // ✅ If Extra Rules is present: return RAW model output, no server enforcement
     if (extra) {
       return res.json({ text: out });
@@ -424,6 +401,7 @@ app.post("/api/rewrite", async (req, res) => {
     // =======================
     // DEFAULTS
     // =======================
+  //this does nothing currently (rewrite base_section)
     const BASE_REWRITE = `
 Rewrite the text to be professional, concise, and clear.
 
@@ -435,6 +413,7 @@ Hard rules:
 - Keep qualifiers (e.g., focal, patchy, cannot exclude)
 - Output ONLY rewritten text (no bullets unless the input used bullets)
 `.trim();
+//// this does nothing currently
 
     const PRESETS = {
 general: `
@@ -453,72 +432,81 @@ If the input is pasted content/notes (not a question):
 
       email: `
 Professional email tone.
-Short paragraphs.
 Polite but direct.
-End with clear ask if present.
 `.trim(),
 
       micro: `
-Pathology microscopic description style.
-Objective wording.
-Keep positives/negatives.
-Remove redundancy.
-No new interpretation.
+Make a better microscopic description used for a pathology report. 
+Sound like an experienced pathologist describing what they see at sign-out.
+No emdashes. 
 `.trim(),
 
       path: `
-Professional pathology description/comment.
-Concise.
-Maintain structure.
-Keep uncertainty qualifiers.
+Rewrite the pathology text to improve clarity, precision, and diagnostic usefulness.
+
+STYLE & SCOPE:
+- Maintain the original bullet structure and diagnostic flow
+- Wording MAY be improved, but stay close to the original phrasing
+- Prefer pathology-standard terminology
+- Avoid unnecessary synonym substitution
+
+RULES:
+- Do not embellish or editorialize
+- Do not over-smooth or make prose-like
+- Keep statements direct and diagnostic
+- Prefer tightening and reordering over complete rephrasing
+- No colons or semicolons
+- Bullet-style diagnostic structure preferred
+
+The output should sound like a senior pathologist lightly refining the original text.
 `.trim()
     };
 
-    let input = "";
+// =======================
+// ALL PRESETS = CHATGPT-STYLE OUTPUT
+// (Keeps your PRESETS so you can refine later.)
+// =======================
+const p = String(preset || "general").toLowerCase();
+const presetSystem = PRESETS[p] || PRESETS.general;
 
-    // =======================
-    // GENERAL MODE (Q/A or SUMMARY)
-    // =======================
-if (String(preset).toLowerCase() === "general") {
-  // Build system prompt (rules)
-  const system = userRules
-    ? `You are a helpful assistant.
+// Rules box overrides preset instructions (optional)
+const system = userRules
+  ? `You are a helpful assistant.
 
 ABSOLUTE OVERRIDE MODE:
 - Follow ONLY the user's rules below. They override all other instructions.
-- Answer questions and/or summarize content as required by the user's rules.
-- Do NOT invent real-world factual claims (dates, diagnoses, lab values, people, institutions) not present in the input.
-- Output ONLY the answer/summary (no preface, no commentary, no quotes).
+- Output ONLY the response (no preface, no commentary, no quotes).
 
 USER RULES:
 ${userRules}`.trim()
-    : PRESETS.general;
+  : presetSystem;
 
-  // User content
-  const user = chunks.join("\n\n");
+// User content
+const user = chunks.join("\n\n");
 
-  // First pass (temperature 0 for "queue" behavior)
-  let finalOut = await callOpenAIChat({
+// Normal ChatGPT-style response for ALL presets
+let finalOut = await callOpenAIChat({
+  apiKey,
+  model,
+  temperature: Number(temperature) || 0.2,
+  system,
+  user,
+});
+
+finalOut = String(finalOut || "").trim();
+
+// If it re-asks the question, force a second pass (optional guard)
+if (finalOut.endsWith("?")) {
+  finalOut = await callOpenAIChat({
     apiKey,
     model,
     temperature: 0,
-    system,
+    system: "Return ONLY the final answer. Do NOT restate or rephrase the question.",
     user,
   });
-
   finalOut = String(finalOut || "").trim();
+}
 
-  // If it re-asks the question, force a second pass
-  if (finalOut.endsWith("?")) {
-    finalOut = await callOpenAIChat({
-      apiKey,
-      model,
-      temperature: 0,
-      system: "Return ONLY the final answer. Do NOT restate or rephrase the question.",
-      user,
-    });
-    finalOut = String(finalOut || "").trim();
-  }
 
   // Single block mode
   if (!d) return res.json({ text: finalOut });
@@ -538,97 +526,9 @@ ${userRules}`.trim()
     });
   }
 
-  const fixed = joinByDelimiter(outChunks, d);
-  return res.json({ text: fixed });
-}
+const fixed = joinByDelimiter(outChunks, d);
+return res.json({ text: fixed });
 
-    // =======================
-    // REWRITE MODE (EMAIL/MICRO/PATH)
-    // =======================
-    if (userRules) {
-      // OVERRIDE MODE (rewrite)
-      input = `
-You are rewriting text.
-
-ABSOLUTE OVERRIDE MODE:
-- Follow ONLY the user's rules below. They override all other instructions.
-- You MAY rewrite aggressively if required to satisfy the user's rules.
-- Do NOT introduce real-world factual claims (dates, diagnoses, lab values, people, institutions) that were not present in the input.
-- If the input is nonsense/gibberish and the user's rules require coherence, you may replace it with a neutral coherent rewrite rather than echoing gibberish.
-
-BATCH RULES:
-- There are ${chunks.length} chunk(s).
-- Rewrite each chunk independently.
-- Return the same number of chunks in the same order.
-${d ? `- Separate chunks with this exact delimiter: ${d}` : ""}
-
-OUTPUT RULES:
-- Output ONLY the rewritten text (no commentary, no preface, no quotes).
-
-USER RULES:
-${userRules}
-
-TEXT CHUNKS:
-${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
-`.trim();
-    } else {
-      // NORMAL MODE (rewrite)
-      input = `
-${BASE_REWRITE}
-
-STYLE:
-${PRESETS[preset] || PRESETS.email}
-
-BATCH RULES:
-- There are ${chunks.length} chunk(s).
-- Rewrite each chunk independently.
-- Return the same number of chunks in the same order.
-${d ? `- Separate chunks with this exact delimiter: ${d}` : ""}
-
-TEXT CHUNKS:
-${chunks.map((c, i) => `---CHUNK ${i + 1}---\n${c}`).join("\n\n")}
-`.trim();
-    }
-
-    const out = await callOpenAI({ apiKey, model, temperature, input });
-
-    let finalOut = String(out || "").trim();
-
-// If the model re-asks the question (common failure), force a second pass
-if (finalOut.endsWith("?")) {
-  const retryInput = `
-Return ONLY the final answer to the user's input.
-Do NOT restate or rephrase the question.
-No preface.
-
-USER INPUT:
-${chunks.join("\n\n")}
-`.trim();
-
-  finalOut = String(
-    await callOpenAI({ apiKey, model, temperature: 0, input: retryInput })
-  ).trim();
-}
-    // If single chunk mode, just return raw out
-    if (!d) return res.json({ text: out });
-
-    // If delimiter mode, enforce chunk count/order server-side
-    const outChunks = splitByDelimiter(finalOut, d);
-
-    if (outChunks.length !== chunks.length) {
-      console.log("rewrite chunk mismatch", {
-        inChunks: chunks.length,
-        outChunks: outChunks.length,
-        delimiter: d
-      });
-      return res.json({
-        text: out,
-        warning: `Model returned ${outChunks.length} chunk(s) but expected ${chunks.length}.`
-      });
-    }
-
-    const fixed = joinByDelimiter(outChunks, d);
-    return res.json({ text: fixed });
   } catch (e) {
     res.status(500).send(String(e?.message || e));
   }

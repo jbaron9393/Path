@@ -131,7 +131,7 @@
 
       <div class="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full">
         <span class="w-2 h-2 rounded-full bg-secondary-500 animate-pulse"></span>
-        Server: localhost:3000
+        <span id="serverBadge">Server: …</span>
       </div>
     </div>
 
@@ -477,28 +477,32 @@ Card 3 text..."
   <script src="script.js" defer></script>
 
   <!-- Tabs script (ONE only) -->
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.feather) feather.replace();
+
+    // ✅ SET SERVER BADGE DYNAMICALLY
+    const sb = document.getElementById("serverBadge");
+    if (sb) sb.textContent = `Server: ${window.location.host}`;
+
+    const buttons = document.querySelectorAll(".tab-btn");
+    const panels = document.querySelectorAll(".tab-panel");
+
+    function activate(tabName) {
+      panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== tabName));
+      buttons.forEach((b) => {
+        const isActive = b.dataset.tab === tabName;
+        b.classList.toggle("bg-primary-600", isActive);
+        b.classList.toggle("text-white", isActive);
+        b.classList.toggle("bg-slate-100", !isActive);
+        b.classList.toggle("text-slate-700", !isActive);
+      });
       if (window.feather) feather.replace();
+    }
 
-      const buttons = document.querySelectorAll(".tab-btn");
-      const panels = document.querySelectorAll(".tab-panel");
-
-      function activate(tabName) {
-        panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== tabName));
-        buttons.forEach((b) => {
-          const isActive = b.dataset.tab === tabName;
-          b.classList.toggle("bg-primary-600", isActive);
-          b.classList.toggle("text-white", isActive);
-          b.classList.toggle("bg-slate-100", !isActive);
-          b.classList.toggle("text-slate-700", !isActive);
-        });
-        if (window.feather) feather.replace();
-      }
-
-      buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.dataset.tab)));
-      activate("refiner");
-    });
-  </script>
+    buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.dataset.tab)));
+    activate("refiner");
+  });
+</script>
 </body>
 </html>

@@ -247,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const ACTIVE_COLORS = {
     general: ["bg-slate-900", "text-white", "border", "border-slate-900", "shadow-sm"],
-    email: ["bg-primary-600", "text-white", "border", "border-primary-600", "shadow-sm"],
+    email: ["bg-primary-600", "text-black", "border", "border-primary-600", "shadow-sm"],
     micro: ["bg-secondary-600", "text-white", "border", "border-secondary-600", "shadow-sm"],
     path: ["bg-purple-600", "text-white", "border", "border-purple-600", "shadow-sm"],
   };
@@ -267,6 +267,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwRules = document.getElementById("rwRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
+  const rwRunOriginalText = rwRun.textContent;
+  
 
   if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
     // Preserve each preset button's original classes (padding/rounded/etc.)
@@ -283,21 +285,15 @@ document.addEventListener("DOMContentLoaded", () => {
 - No new facts`;
 
     function setPlaceholdersForPreset(preset) {
-      if (preset === "general") {
-        rwInput.placeholder =
-          "Ask anything or paste text — you’ll get a succinct answer/summary.";
-        rwRules.placeholder =
-          "Optional: constraints (tone, bullets, length, style). Leave empty for default succinct answers.";
-      } else {
-        rwInput.placeholder = "Paste text to rewrite…";
-        rwRules.placeholder = "Rules (auto-filled if empty for this preset)";
-      }
-    }
+  rwInput.placeholder =
+    "Ask anything or paste text — you’ll get a normal ChatGPT-style response.";
+  rwRules.placeholder =
+    "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
+}
 
     function applyRulesForPreset(preset) {
-      if (preset === "general") return;
-      if (!rwRules.value.trim()) rwRules.value = DEFAULT_RULES;
-    }
+  // Do nothing — rules box is user-controlled.
+}
 
     function setRunButtonLabel(preset) {
       rwRun.textContent = preset === "general" ? "Send ➜" : "Refine ✨";
@@ -399,7 +395,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!text) return setStatus("Type a question or paste text first.");
 
       rwRun.disabled = true;
-      setStatus(rwPreset === "general" ? "Thinking…" : "Rewriting…");
+      if (rwPreset === "general") {
+        rwRun.textContent = "Sending…";
+        setStatus("Sending…");
+      } else {
+        rwRun.textContent = "Refining…";
+        setStatus("Refining…");
+      }
 
       try {
         const res = await fetch("/api/rewrite", {
@@ -425,9 +427,11 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (err) {
         console.error("Rewriter error:", err);
         setStatus("Rewriter error: " + (err?.message || String(err)));
-      } finally {
+        } finally {
         rwRun.disabled = false;
+        setRunButtonLabel(rwPreset); // restores "Send ➜" or "Refine ✨"
       }
+
     });
 
     // Default preset on load
