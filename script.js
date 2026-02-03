@@ -267,12 +267,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwRules = document.getElementById("rwRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
-  const rwRunOriginalText = rwRun.textContent;
   
 
   if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
     // Preserve each preset button's original classes (padding/rounded/etc.)
     // IMPORTANT: remove hover:bg-* from the HTML base classes, and control hover in CSS.
+    const rwRunOriginalText = rwRun.textContent;
     rwPresetBtns.forEach((btn) => {
       btn.dataset.baseClass = btn.className;
       btn.setAttribute("type", "button");
@@ -286,7 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setPlaceholdersForPreset(preset) {
   rwInput.placeholder =
-    "Ask anything or paste text — you’ll get a normal ChatGPT-style response.";
+    "Ask anything or paste text here";
   rwRules.placeholder =
     "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
 }
