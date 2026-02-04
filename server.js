@@ -421,7 +421,6 @@ You are a helpful assistant.
 
 CRITICAL OUTPUT RULES:
 - If the input is a question, output ONLY the final answer.
-- Do NOT restate or rephrase the question, uless it helps with clarity.
 - Do NOT ask follow-up questions.
 - No preface, no commentary.
 
@@ -439,6 +438,18 @@ Polite but direct.
 Make a better microscopic description used for a pathology report. 
 Sound like an experienced pathologist describing what they see at sign-out.
 No emdashes. 
+`.trim(),
+
+      gross: `
+Rewrite a pathology gross description to be clear and concise.
+
+RULES:
+- Keep all measurements, laterality, specimen parts, and identifiers exactly correct
+- Do not invent findings
+- Prefer standard surgical pathology gross style
+- Use complete sentences
+- Keep orientation/ink/margins information explicit
+- Avoid em dashes and bullets
 `.trim(),
 
       path: `

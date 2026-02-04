@@ -280,6 +280,18 @@
               </button>
 
               <button
+              type="button"
+              class="rwPreset text-xs px-3 py-1.5 rounded-lg
+              border border-slate-200 dark:border-slate-700
+              bg-white/70 dark:bg-slate-800/70
+              text-slate-700 dark:text-slate-200
+              shadow-sm transition-all"
+              data-preset="gross"
+            >
+              Gross
+            </button>
+
+              <button
                 type="button"
                 class="rwPreset text-xs px-3 py-1.5 rounded-lg
                 border border-slate-200 dark:border-slate-700
@@ -324,9 +336,47 @@
               </button>
             </div>
 
-            <label class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Rules (editable)
-            </label>
+<div class="flex items-center justify-between">
+  <div class="flex items-baseline gap-2">
+    <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+      Rules override
+    </div>
+    <div class="text-xs text-slate-500 dark:text-slate-400">
+      (editable)
+    </div>
+  </div>
+
+  <!-- IMPORTANT: label wraps the input + track so clicking works -->
+<label class="inline-flex items-center gap-2 cursor-pointer select-none">
+  <span class="text-[11px] font-medium text-slate-500 dark:text-slate-300">
+    Keep Rules
+  </span>
+
+  <!-- ✅ explicit size so the invisible input has a real click box -->
+  <span class="relative inline-block h-6 w-12">
+    <input
+      id="rwKeepRules"
+      type="checkbox"
+      class="peer absolute inset-0 z-10 opacity-0 cursor-pointer"
+    />
+
+    <span
+      class="absolute inset-0 rounded-full
+             bg-slate-200 dark:bg-slate-700
+             border border-slate-300 dark:border-slate-600
+             transition-colors
+             peer-checked:bg-purple-600 peer-checked:border-purple-600"
+    >
+      <span
+        class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow
+               transition-transform
+               peer-checked:translate-x-6"
+      ></span>
+    </span>
+  </span>
+</label>
+
+</div>
 
             <textarea
               id="rwRules"
@@ -508,7 +558,7 @@ Card 3 text..."
               <button
                 id="refineAll"
                 type="button"
-                class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 <i data-feather="zap" class="w-4 h-4"></i>
                 Refine All
@@ -638,42 +688,89 @@ Card 3 text..."
       });
     }
 
+    // ============================
     // Tabs
+    // ============================
     const buttons = document.querySelectorAll(".tab-btn");
     const panels = document.querySelectorAll(".tab-panel");
 
     function activate(tabName) {
       panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== tabName));
       buttons.forEach((b) => {
-      const isActive = b.dataset.tab === tabName;
+        const isActive = b.dataset.tab === tabName;
 
-      // Active state
-      b.classList.toggle("bg-primary-600", isActive);
-      b.classList.toggle("text-white", isActive);
-      b.classList.toggle("ring-2", isActive);
-      b.classList.toggle("ring-primary-500/40", isActive);
+        // Active state
+        b.classList.toggle("bg-primary-600", isActive);
+        b.classList.toggle("text-white", isActive);
+        b.classList.toggle("ring-2", isActive);
+        b.classList.toggle("ring-primary-500/40", isActive);
 
-      // Inactive state
-      b.classList.toggle("bg-slate-100", !isActive);
-      b.classList.toggle("dark:bg-slate-800", !isActive);
-      b.classList.toggle("text-slate-700", !isActive);
-      b.classList.toggle("dark:text-slate-200", !isActive);
+        // Inactive state
+        b.classList.toggle("bg-slate-100", !isActive);
+        b.classList.toggle("dark:bg-slate-800", !isActive);
+        b.classList.toggle("text-slate-700", !isActive);
+        b.classList.toggle("dark:text-slate-200", !isActive);
 
-      // Clean up hover glow on inactive
-      if (!isActive) {
-        b.classList.remove(
-          "ring-2",
-          "ring-primary-500/40",
-          "shadow-lg",
-          "shadow-primary-500/30"
-        );
-      }
-    });
+        // Clean up hover glow on inactive
+        if (!isActive) {
+          b.classList.remove("ring-2", "ring-primary-500/40", "shadow-lg", "shadow-primary-500/30");
+        }
+      });
+
       if (window.feather) feather.replace();
+    }
+
+        function clearRefinerTab() {
+      bulkInput.value = "";
+      if (extraRulesEl) extraRulesEl.value = "";
+      renderCards([]);
+      refreshStats();
+      setStatus("");
+    }
+
+    function clearRewriterTab() {
+      rwInput.value = "";
+      rwRules.value = "";
+      rwOutput.value = "";
+      rwCopy.disabled = true;
+      setStatus("");
     }
 
     buttons.forEach((btn) => btn.addEventListener("click", () => activate(btn.dataset.tab)));
     activate("rewriter"); // or "refiner" or "synoptic"
+
+    // ============================
+    // Enter = Refine | Ctrl/Cmd+Enter = New line
+    // bulkInput + extraRules
+    // ============================
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLTextAreaElement)) return;
+        if (t.id !== "bulkInput" && t.id !== "extraRules") return;
+
+        const isEnter = e.key === "Enter" || e.key === "NumpadEnter";
+        if (!isEnter) return;
+
+        const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+        // Ctrl/Cmd + Enter → newline
+        if (isCtrlOrCmd) {
+          e.preventDefault();
+          const start = t.selectionStart ?? t.value.length;
+          const end = t.selectionEnd ?? t.value.length;
+          t.value = t.value.slice(0, start) + "\n" + t.value.slice(end);
+          t.selectionStart = t.selectionEnd = start + 1;
+          return;
+        }
+
+        // Enter → refine
+        e.preventDefault();
+        if (typeof refineAll === "function") refineAll();
+      },
+      true
+    );
   });
 </script>
 </body>

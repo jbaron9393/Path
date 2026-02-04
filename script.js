@@ -160,6 +160,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function bindEnterSendCtrlNewline(textarea, onSend) {
+    if (!textarea) return;
+
+    textarea.addEventListener(
+      "keydown",
+      (e) => {
+        const isEnter = e.key === "Enter" || e.key === "NumpadEnter";
+        if (!isEnter) return;
+
+        const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+
+        // Ctrl/Cmd + Enter → newline
+        if (isCmdOrCtrl) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          e.stopPropagation();
+
+          const start = textarea.selectionStart ?? textarea.value.length;
+          const end = textarea.selectionEnd ?? textarea.value.length;
+
+          textarea.value =
+            textarea.value.slice(0, start) + "\n" + textarea.value.slice(end);
+
+          textarea.selectionStart = textarea.selectionEnd = start + 1;
+          return;
+        }
+
+        // Enter alone → send/refine
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        onSend();
+      },
+      true // capture
+    );
+  }
+
+  // Apply to BOTH fields
+  bindEnterSendCtrlNewline(bulkInput, refineAll);
+  bindEnterSendCtrlNewline(extraRulesEl, refineAll);
+
   // ----- wire up events -----
   bulkInput.style.caretColor = "#0f172a";
 
@@ -169,6 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
   clearBtn.addEventListener("click", (e) => {
     e.preventDefault();
     bulkInput.value = "";
+    if (extraRulesEl) extraRulesEl.value = "";
     renderCards([]);
     refreshStats();
     setStatus("Cleared.");
@@ -178,10 +220,6 @@ document.addEventListener("DOMContentLoaded", () => {
   refineAllBtn.addEventListener("click", (e) => {
     e.preventDefault();
     refineAll();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "Enter") refineAll();
   });
 
   autoInsertBtn.addEventListener("click", (e) => {
@@ -244,11 +282,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // REWRITER TAB WIRING (UPDATED)
   // ============================
   let rwPreset = "general";
+  let lastPreset = rwPreset;
 
   const ACTIVE_COLORS = {
     general: ["bg-slate-900", "text-white", "border", "border-slate-900", "shadow-sm"],
     email: ["bg-primary-600", "text-black", "border", "border-primary-600", "shadow-sm"],
     micro: ["bg-secondary-600", "text-white", "border", "border-secondary-600", "shadow-sm"],
+    gross:   ["bg-rose-600", "text-white", "border", "border-rose-600", "shadow-sm"],
     path: ["bg-purple-600", "text-white", "border", "border-purple-600", "shadow-sm"],
   };
 
@@ -265,51 +305,49 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwRun = document.getElementById("rwRun");
   const rwClear = document.getElementById("rwClear");
   const rwRules = document.getElementById("rwRules");
+  const rwKeepRules = document.getElementById("rwKeepRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
-  
 
   if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
     // Preserve each preset button's original classes (padding/rounded/etc.)
-    // IMPORTANT: remove hover:bg-* from the HTML base classes, and control hover in CSS.
-    const rwRunOriginalText = rwRun.textContent;
     rwPresetBtns.forEach((btn) => {
       btn.dataset.baseClass = btn.className;
       btn.setAttribute("type", "button");
       btn.setAttribute("aria-pressed", "false"); // used by CSS to distinguish active/inactive hover
     });
 
-    const DEFAULT_RULES = `- Keep meaning identical
-- Remove filler
-- Keep qualifiers (e.g., focal, patchy, cannot exclude)
-- No new facts`;
+    // Keep-rules toggle persistence
+    const KEEP_RULES_KEY = "rwKeepRules";
+    if (rwKeepRules) {
+      rwKeepRules.checked = localStorage.getItem(KEEP_RULES_KEY) === "true";
+      rwKeepRules.addEventListener("change", () => {
+        localStorage.setItem(KEEP_RULES_KEY, String(rwKeepRules.checked));
+      });
+    }
 
-    function setPlaceholdersForPreset(preset) {
-  rwInput.placeholder =
-    "Ask anything or paste text here";
-  rwRules.placeholder =
-    "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
-}
+    function setPlaceholdersForPreset(_preset) {
+      rwInput.placeholder = "Ask anything or paste text here";
+      rwRules.placeholder =
+        "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
+    }
 
-    function applyRulesForPreset(preset) {
-  // Do nothing — rules box is user-controlled.
-}
+    function applyRulesForPreset(_preset) {
+      // Do nothing — rules box is user-controlled.
+    }
 
     function setRunButtonLabel(preset) {
       rwRun.textContent = preset === "general" ? "Send ➜" : "Refine ✨";
     }
 
     function setPresetActive(preset) {
-      // mark all inactive for CSS hover rule
       rwPresetBtns.forEach((b) => b.setAttribute("aria-pressed", "false"));
 
-      // reset buttons
       rwPresetBtns.forEach((b) => {
         b.className = b.dataset.baseClass || b.className;
         b.classList.add(...INACTIVE_COLORS);
       });
 
-      // activate selected
       const activeBtn = document.querySelector(`.rwPreset[data-preset="${preset}"]`);
       if (activeBtn) {
         activeBtn.setAttribute("aria-pressed", "true");
@@ -318,12 +356,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Enter = submit, Ctrl/Cmd + Enter = newline
+    function clearRewriterFields({ clearRules } = { clearRules: true }) {
+      rwInput.value = "";
+      rwOutput.value = "";
+      rwCopy.disabled = true;
+      if (clearRules) rwRules.value = "";
+    }
+
+    // Enter = submit, Ctrl/Cmd + Enter = newline (rwInput)
     rwInput.addEventListener("keydown", (e) => {
       const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const isEnter = e.key === "Enter" || e.key === "NumpadEnter";
+      if (!isEnter) return;
 
-      // Ctrl/Cmd + Enter → newline
-      if (isCmdOrCtrl && e.key === "Enter") {
+      if (isCmdOrCtrl) {
         e.preventDefault();
         const start = rwInput.selectionStart ?? rwInput.value.length;
         const end = rwInput.selectionEnd ?? rwInput.value.length;
@@ -332,11 +378,27 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Enter alone → submit
-      if (!isCmdOrCtrl && e.key === "Enter") {
+      e.preventDefault();
+      rwRun.click();
+    });
+
+    // Enter = submit, Ctrl/Cmd + Enter = newline (rwRules)
+    rwRules.addEventListener("keydown", (e) => {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const isEnter = e.key === "Enter" || e.key === "NumpadEnter";
+      if (!isEnter) return;
+
+      if (isCmdOrCtrl) {
         e.preventDefault();
-        rwRun.click();
+        const start = rwRules.selectionStart ?? rwRules.value.length;
+        const end = rwRules.selectionEnd ?? rwRules.value.length;
+        rwRules.value = rwRules.value.slice(0, start) + "\n" + rwRules.value.slice(end);
+        rwRules.selectionStart = rwRules.selectionEnd = start + 1;
+        return;
       }
+
+      e.preventDefault();
+      rwRun.click();
     });
 
     // Copy output
@@ -363,11 +425,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Preset buttons
+    // Preset buttons (clear on change; keep rules if toggle on)
     rwPresetBtns.forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
-        rwPreset = btn.dataset.preset || "general";
+        const nextPreset = btn.dataset.preset || "general";
+
+        if (nextPreset !== lastPreset) {
+          const keepRules = rwKeepRules?.checked === true;
+          clearRewriterFields({ clearRules: !keepRules });
+          setStatus("");
+        }
+
+        rwPreset = nextPreset;
+        lastPreset = nextPreset;
 
         setPresetActive(rwPreset);
         applyRulesForPreset(rwPreset);
@@ -378,12 +449,11 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
 
-    // Clear
+    // Clear (respects Keep toggle)
     rwClear.addEventListener("click", (e) => {
       e.preventDefault();
-      rwInput.value = "";
-      rwOutput.value = "";
-      rwCopy.disabled = true;
+      const keepRules = rwKeepRules?.checked === true;
+      clearRewriterFields({ clearRules: !keepRules });
       setStatus("Cleared rewriter.");
       rwInput.focus();
     });
@@ -395,13 +465,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!text) return setStatus("Type a question or paste text first.");
 
       rwRun.disabled = true;
-      if (rwPreset === "general") {
-        rwRun.textContent = "Sending…";
-        setStatus("Sending…");
-      } else {
-        rwRun.textContent = "Refining…";
-        setStatus("Refining…");
-      }
+      rwRun.textContent = rwPreset === "general" ? "Sending…" : "Refining…";
+      setStatus(rwPreset === "general" ? "Sending…" : "Refining…");
 
       try {
         const res = await fetch("/api/rewrite", {
@@ -427,11 +492,10 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (err) {
         console.error("Rewriter error:", err);
         setStatus("Rewriter error: " + (err?.message || String(err)));
-        } finally {
+      } finally {
         rwRun.disabled = false;
-        setRunButtonLabel(rwPreset); // restores "Send ➜" or "Refine ✨"
+        setRunButtonLabel(rwPreset);
       }
-
     });
 
     // Default preset on load
