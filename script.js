@@ -449,6 +449,10 @@ document.addEventListener("DOMContentLoaded", () => {
     rwCopy.disabled = true;
     const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
+    rwOutput.addEventListener("input", () => {
+      rwCopy.disabled = !(rwOutput.value || "").trim();
+    });
+
     rwCopy.addEventListener("click", async () => {
       const text = (rwOutput.value || "").trim();
       if (!text) return;
