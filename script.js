@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadAllBtn = document.getElementById("downloadAll");
 
   const extraRulesEl = document.getElementById("extraRules"); // optional box
+  const rfKeepRules = document.getElementById("rfKeepRules");
 
   // ---- hard fails (prevents "nothing happens") ----
   const required = [
@@ -252,10 +253,11 @@ document.addEventListener("DOMContentLoaded", () => {
   clearBtn.addEventListener("click", (e) => {
     e.preventDefault();
     bulkInput.value = "";
-    if (extraRulesEl) extraRulesEl.value = "";
+    const keepRefinerRules = rfKeepRules?.checked === true;
+    if (extraRulesEl && !keepRefinerRules) extraRulesEl.value = "";
     renderCards([]);
     refreshStats();
-    setStatus("Cleared.");
+    setStatus(keepRefinerRules ? "Cleared input and output. Kept extra rules." : "Cleared.");
     bulkInput.focus();
   });
 
