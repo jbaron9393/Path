@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadAllBtn = document.getElementById("downloadAll");
 
   const extraRulesEl = document.getElementById("extraRules"); // optional box
+  const rfKeepRules = document.getElementById("rfKeepRules");
 
   // ---- hard fails (prevents "nothing happens") ----
   const required = [
@@ -70,6 +71,73 @@ document.addEventListener("DOMContentLoaded", () => {
   function setActionsEnabled(on) {
     copyAllBtn.disabled = !on;
     downloadAllBtn.disabled = !on;
+  }
+
+  const REFINE_KEEP_RULES_KEY = "rfKeepRules";
+  if (rfKeepRules) {
+    rfKeepRules.checked = localStorage.getItem(REFINE_KEEP_RULES_KEY) === "true";
+    rfKeepRules.addEventListener("change", () => {
+      localStorage.setItem(REFINE_KEEP_RULES_KEY, String(rfKeepRules.checked));
+      setStatus(rfKeepRules.checked ? "Refiner: keeping extra rules on clear." : "Refiner: clear also removes extra rules.");
+    });
+  }
+
+  async function apiPostJson(url, payload, { timeoutMs = 30000, retryOn401 = true } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+        signal: controller.signal,
+      });
+
+      const bodyText = await res.text();
+
+      if (res.status === 401 && retryOn401) {
+        await pingSession({ silent: true });
+        return apiPostJson(url, payload, { timeoutMs, retryOn401: false });
+      }
+
+      if (!res.ok) throw new Error(bodyText || `Request failed (${res.status})`);
+
+      return bodyText ? JSON.parse(bodyText) : {};
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        throw new Error("Request timed out. If the app was idle, try again.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function pingSession({ silent = false } = {}) {
+    try {
+      const res = await fetch("/api/ping", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        if (!silent) setStatus("Session expired. Refresh and sign in again.");
+        return false;
+      }
+
+      if (!res.ok && !silent) {
+        setStatus("Connection check failed. Reload and sign in again.");
+      }
+      return res.ok;
+    } catch (_err) {
+      if (!silent) {
+        setStatus("Connection lost. Ensure server.js is still running.");
+      }
+      return false;
+    }
   }
 
   // ----- render -----
@@ -131,22 +199,13 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus("Refining cards…");
 
     try {
-      const res = await fetch("/api/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: raw,
-          model: modelEl.value,
-          temperature: Number(tempEl.value),
-          delimiter: getDelimiter(),
-          extraRules: extraRulesEl?.value || "",
-        }),
+      const j = await apiPostJson("/api/refine", {
+        text: raw,
+        model: modelEl.value,
+        temperature: Number(tempEl.value),
+        delimiter: getDelimiter(),
+        extraRules: extraRulesEl?.value || "",
       });
-
-      const bodyText = await res.text();
-      if (!res.ok) throw new Error(bodyText);
-
-      const j = JSON.parse(bodyText);
       const resultText = j.text ?? j.output ?? "";
       const cards = splitCards(resultText);
 
@@ -210,10 +269,11 @@ document.addEventListener("DOMContentLoaded", () => {
   clearBtn.addEventListener("click", (e) => {
     e.preventDefault();
     bulkInput.value = "";
-    if (extraRulesEl) extraRulesEl.value = "";
+    const keepRefinerRules = rfKeepRules?.checked === true;
+    if (extraRulesEl && !keepRefinerRules) extraRulesEl.value = "";
     renderCards([]);
     refreshStats();
-    setStatus("Cleared.");
+    setStatus(keepRefinerRules ? "Cleared input and output. Kept extra rules." : "Cleared.");
     bulkInput.focus();
   });
 
@@ -405,6 +465,10 @@ document.addEventListener("DOMContentLoaded", () => {
     rwCopy.disabled = true;
     const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
+    rwOutput.addEventListener("input", () => {
+      rwCopy.disabled = !(rwOutput.value || "").trim();
+    });
+
     rwCopy.addEventListener("click", async () => {
       const text = (rwOutput.value || "").trim();
       if (!text) return;
@@ -469,23 +533,13 @@ document.addEventListener("DOMContentLoaded", () => {
       setStatus(rwPreset === "general" ? "Sending…" : "Refining…");
 
       try {
-        const res = await fetch("/api/rewrite", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            model: modelEl?.value || "gpt-4.1-mini",
-            temperature: Number(tempEl?.value) || 0.2,
-            preset: rwPreset,
-            rules: rwRules.value || "",
-          }),
+        const j = await apiPostJson("/api/rewrite", {
+          text,
+          model: modelEl?.value || "gpt-4.1-mini",
+          temperature: Number(tempEl?.value) || 0.2,
+          preset: rwPreset,
+          rules: rwRules.value || "",
         });
-
-        const bodyText = await res.text();
-        if (!res.ok) throw new Error(bodyText);
-
-        const j = JSON.parse(bodyText);
         rwOutput.value = (j.text ?? "").trim();
         rwCopy.disabled = !rwOutput.value.trim();
         setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
@@ -503,6 +557,22 @@ document.addEventListener("DOMContentLoaded", () => {
     applyRulesForPreset("general");
     setPlaceholdersForPreset("general");
     setRunButtonLabel("general");
+
+    // Keep session warm so long-idle tabs still respond quickly.
+    const keepAliveMs = 4 * 60 * 1000;
+    const keepAliveId = window.setInterval(() => {
+      pingSession({ silent: true });
+    }, keepAliveMs);
+
+    window.addEventListener("beforeunload", () => {
+      window.clearInterval(keepAliveId);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") pingSession({ silent: true });
+    });
+
+    pingSession({ silent: true });
   } else {
     console.warn("Rewriter wiring skipped: missing elements or preset buttons not found.");
   }
