@@ -51,6 +51,11 @@ app.get("/health", (req, res) => res.status(200).send("ok"));
 // Apply auth to everything else
 app.use(requirePassword);
 
+// Authenticated ping used by the browser tab to keep auth/session paths warm.
+app.get("/api/ping", (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 // Homepage
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "cap_cloze_refiner.html"));
