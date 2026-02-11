@@ -88,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bodyText = await res.text();
 
       if (res.status === 401 && retryOn401) {
-        await pingSession({ silent: true });
+        await pingHealth({ silent: true });
         return apiPostJson(url, payload, { timeoutMs, retryOn401: false });
       }
 
@@ -105,28 +105,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function pingSession({ silent = false } = {}) {
+  async function pingHealth({ silent = false } = {}) {
     try {
-      const res = await fetch("/api/ping", {
+      const res = await fetch("/health", {
         method: "GET",
         cache: "no-store",
         credentials: "include",
       });
 
-      if (res.status === 401) {
-        if (!silent) setStatus("Session expired. Refresh and sign in again.");
-        return false;
-      }
-
       if (!res.ok && !silent) {
         setStatus("Connection check failed. Reload and sign in again.");
       }
-      return res.ok;
     } catch (_err) {
       if (!silent) {
         setStatus("Connection lost. Ensure server.js is still running.");
       }
-      return false;
     }
   }
 
@@ -546,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Keep session warm so long-idle tabs still respond quickly.
     const keepAliveMs = 4 * 60 * 1000;
     const keepAliveId = window.setInterval(() => {
-      pingSession({ silent: true });
+      pingHealth({ silent: true });
     }, keepAliveMs);
 
     window.addEventListener("beforeunload", () => {
@@ -554,10 +547,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") pingSession({ silent: true });
+      if (document.visibilityState === "visible") pingHealth({ silent: true });
     });
 
-    pingSession({ silent: true });
+    pingHealth({ silent: true });
   } else {
     console.warn("Rewriter wiring skipped: missing elements or preset buttons not found.");
   }
