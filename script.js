@@ -329,11 +329,56 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastPreset = rwPreset;
 
   const ACTIVE_COLORS = {
-    general: ["bg-slate-900", "text-white", "border", "border-slate-900", "shadow-sm"],
-    email: ["bg-primary-600", "text-black", "border", "border-primary-600", "shadow-sm"],
-    micro: ["bg-secondary-600", "text-white", "border", "border-secondary-600", "shadow-sm"],
-    gross:   ["bg-rose-600", "text-white", "border", "border-rose-600", "shadow-sm"],
-    path: ["bg-purple-600", "text-white", "border", "border-purple-600", "shadow-sm"],
+    general: [
+      "bg-slate-900",
+      "text-white",
+      "border",
+      "border-slate-900",
+      "dark:bg-slate-100",
+      "dark:text-slate-900",
+      "dark:border-slate-100",
+      "shadow-sm",
+    ],
+    email: [
+      "bg-primary-600",
+      "text-white",
+      "border",
+      "border-primary-600",
+      "dark:bg-primary-500",
+      "dark:text-white",
+      "dark:border-primary-500",
+      "shadow-sm",
+    ],
+    micro: [
+      "bg-secondary-600",
+      "text-white",
+      "border",
+      "border-secondary-600",
+      "dark:bg-secondary-500",
+      "dark:text-white",
+      "dark:border-secondary-500",
+      "shadow-sm",
+    ],
+    gross: [
+      "bg-rose-600",
+      "text-white",
+      "border",
+      "border-rose-600",
+      "dark:bg-rose-500",
+      "dark:text-white",
+      "dark:border-rose-500",
+      "shadow-sm",
+    ],
+    path: [
+      "bg-purple-600",
+      "text-white",
+      "border",
+      "border-purple-600",
+      "dark:bg-purple-500",
+      "dark:text-white",
+      "dark:border-purple-500",
+      "shadow-sm",
+    ],
   };
 
   const INACTIVE_COLORS = [
