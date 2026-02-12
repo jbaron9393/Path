@@ -439,6 +439,90 @@ document.addEventListener("DOMContentLoaded", () => {
       rwRun.textContent = preset === "general" ? "Send ➜" : "Refine ✨";
     }
 
+    function normalizeOutputText(text) {
+      return String(text || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .trim();
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatInlineMarkdown(text) {
+      let out = escapeHtml(text);
+      out = out.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      out = out.replace(/__(.+?)__/g, "<u>$1</u>");
+      out = out.replace(/\*(.+?)\*/g, "<em>$1</em>");
+      return out;
+    }
+
+    function renderOutputRichText(rawText) {
+      const normalized = normalizeOutputText(rawText);
+      const lines = normalized.split("\n");
+      const htmlParts = [];
+      let inList = false;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          if (inList) {
+            htmlParts.push("</ul>");
+            inList = false;
+          }
+          htmlParts.push('<div class="h-3"></div>');
+          continue;
+        }
+
+        const bulletMatch = line.match(/^\s*-\s+(.+)$/);
+        if (bulletMatch) {
+          if (!inList) {
+            htmlParts.push('<ul class="list-disc pl-6 space-y-1">');
+            inList = true;
+          }
+          htmlParts.push(`<li>${formatInlineMarkdown(bulletMatch[1])}</li>`);
+          continue;
+        }
+
+        if (inList) {
+          htmlParts.push("</ul>");
+          inList = false;
+        }
+
+        const h3Match = trimmed.match(/^###\s+(.+)$/);
+        if (h3Match) {
+          htmlParts.push(`<h3 class="text-base font-semibold">${formatInlineMarkdown(h3Match[1])}</h3>`);
+          continue;
+        }
+
+        htmlParts.push(`<p>${formatInlineMarkdown(trimmed)}</p>`);
+      }
+
+      if (inList) htmlParts.push("</ul>");
+
+      return {
+        normalized,
+        html: htmlParts.join(""),
+      };
+    }
+
+    function getRwOutputRaw() {
+      const fromDataset = rwOutput?.dataset?.raw || "";
+      if (fromDataset) return fromDataset;
+
+      const fromRenderedText = String(rwOutput?.innerText || "")
+        .replace(/ /g, " ")
+        .trim();
+      return fromRenderedText;
+    }
+
     function setPresetActive(preset) {
       rwPresetBtns.forEach((b) => b.setAttribute("aria-pressed", "false"));
 
@@ -457,7 +541,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function clearRewriterFields({ clearRules } = { clearRules: true }) {
       rwInput.value = "";
-      rwOutput.value = "";
+      rwOutput.innerHTML = "";
+      rwOutput.dataset.raw = "";
       rwCopy.disabled = true;
       if (clearRules) rwRules.value = "";
     }
@@ -504,12 +589,8 @@ document.addEventListener("DOMContentLoaded", () => {
     rwCopy.disabled = true;
     const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
-    rwOutput.addEventListener("input", () => {
-      rwCopy.disabled = !(rwOutput.value || "").trim();
-    });
-
     rwCopy.addEventListener("click", async () => {
-      const text = (rwOutput.value || "").trim();
+      const text = getRwOutputRaw();
       if (!text) return;
 
       try {
@@ -567,21 +648,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (!text) return setStatus("Type a question or paste text first.");
 
+      const previousAnswer = getRwOutputRaw();
+      const isGeneralFollowUp = rwPreset === "general" && previousAnswer.length > 0;
+      const requestText = isGeneralFollowUp
+        ? `You previously answered:\n\n${previousAnswer}\n\nFollow-up question:\n${text}`
+        : text;
+
       rwRun.disabled = true;
       rwRun.textContent = rwPreset === "general" ? "Sending…" : "Refining…";
-      setStatus(rwPreset === "general" ? "Sending…" : "Refining…");
+      setStatus(
+        rwPreset === "general"
+          ? isGeneralFollowUp
+            ? "Sending follow-up…"
+            : "Sending…"
+          : "Refining…"
+      );
 
       try {
         const j = await apiPostJson("/api/rewrite", {
-          text,
+          text: requestText,
           model: modelEl?.value || "gpt-4.1-mini",
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
           rules: rwRules.value || "",
           clientDateContext: getClientDateContext(),
         });
-        rwOutput.value = (j.text ?? "").trim();
-        rwCopy.disabled = !rwOutput.value.trim();
+        const renderedOutput = renderOutputRichText(j.text ?? "");
+        rwOutput.innerHTML = renderedOutput.html;
+        rwOutput.dataset.raw = renderedOutput.normalized;
+        rwCopy.disabled = !renderedOutput.normalized;
         setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
