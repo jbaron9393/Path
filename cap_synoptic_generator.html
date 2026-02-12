@@ -4558,7 +4558,32 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', initApp);
+    function syncEmbeddedTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const useDark = savedTheme ? savedTheme === 'dark' : prefersDark;
+        document.documentElement.classList.toggle('dark', useDark);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        syncEmbeddedTheme();
+        initApp();
+    });
+
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'theme') {
+            syncEmbeddedTheme();
+        }
+    });
+
+    let lastThemeValue = localStorage.getItem('theme');
+    setInterval(() => {
+        const currentThemeValue = localStorage.getItem('theme');
+        if (currentThemeValue !== lastThemeValue) {
+            lastThemeValue = currentThemeValue;
+            syncEmbeddedTheme();
+        }
+    }, 250);
     </script>
 </body>
 </html>
