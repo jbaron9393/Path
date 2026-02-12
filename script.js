@@ -514,7 +514,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function getRwOutputRaw() {
-      return rwOutput?.dataset?.raw || "";
+      const fromDataset = rwOutput?.dataset?.raw || "";
+      if (fromDataset) return fromDataset;
+
+      const fromRenderedText = String(rwOutput?.innerText || "")
+        .replace(/ /g, " ")
+        .trim();
+      return fromRenderedText;
     }
 
     function setPresetActive(preset) {
@@ -642,7 +648,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (!text) return setStatus("Type a question or paste text first.");
 
-      const previousAnswer = (rwOutput.value || "").trim();
+      const previousAnswer = getRwOutputRaw();
       const isGeneralFollowUp = rwPreset === "general" && previousAnswer.length > 0;
       const requestText = isGeneralFollowUp
         ? `You previously answered:\n\n${previousAnswer}\n\nFollow-up question:\n${text}`
