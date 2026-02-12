@@ -107,8 +107,22 @@
     .rwPreset[aria-pressed="true"]:hover {
       filter: brightness(0.95);
     }
-  </style>
-</head>
+
+
+    .rw-output:empty::before {
+      content: attr(data-placeholder);
+      color: rgb(148 163 184);
+    }
+    .dark .rw-output:empty::before {
+      color: rgb(100 116 139);
+    }
+
+    .rw-output {
+      resize: vertical;
+      min-height: 12rem;
+      max-height: 80vh;
+    }
+  </style></head>
 
 <body class="font-sans antialiased min-h-screen p-4 md:p-8 bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
   <div class="bg-decor fixed inset-0 -z-10"></div>
@@ -217,6 +231,7 @@
               focus:bg-white dark:focus:bg-slate-900 transition-all"
             ></textarea>
 
+
             <div class="flex gap-2">
               <button
                 id="rwRun"
@@ -309,17 +324,21 @@
           <div class="space-y-3">
             <label class="text-sm font-semibold text-slate-700 dark:text-slate-200">Output</label>
 
-            <textarea
+            <div
               id="rwOutput"
-              placeholder="Response will appear here…"
-              class="w-full h-72 px-4 py-3
+              role="textbox"
+              aria-multiline="true"
+              contenteditable="true"
+              spellcheck="false"
+              data-placeholder="Response will appear here…"
+              class="rw-output w-full h-72 px-4 py-3 overflow-y-auto
               bg-slate-50 dark:bg-slate-900
               border border-slate-200 dark:border-slate-700
               rounded-xl font-sans text-[15px] leading-relaxed tracking-tight
-              text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
-              resize-y focus:outline-none focus:ring-2 focus:ring-primary-500
+              text-slate-900 dark:text-slate-100
+              focus:outline-none focus:ring-2 focus:ring-primary-500
               focus:bg-white dark:focus:bg-slate-900 transition-all"
-            ></textarea>
+            ></div>
 
             <div class="flex justify-end mt-2">
               <button
@@ -755,7 +774,8 @@ Card 3 text..."
     function clearRewriterTab() {
       rwInput.value = "";
       rwRules.value = "";
-      rwOutput.value = "";
+      rwOutput.innerHTML = "";
+      rwOutput.dataset.raw = "";
       rwCopy.disabled = true;
       setStatus("");
     }
