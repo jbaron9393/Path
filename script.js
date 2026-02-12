@@ -567,13 +567,25 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (!text) return setStatus("Type a question or paste text first.");
 
+      const previousAnswer = (rwOutput.value || "").trim();
+      const isGeneralFollowUp = rwPreset === "general" && previousAnswer.length > 0;
+      const requestText = isGeneralFollowUp
+        ? `You previously answered:\n\n${previousAnswer}\n\nFollow-up question:\n${text}`
+        : text;
+
       rwRun.disabled = true;
       rwRun.textContent = rwPreset === "general" ? "Sending…" : "Refining…";
-      setStatus(rwPreset === "general" ? "Sending…" : "Refining…");
+      setStatus(
+        rwPreset === "general"
+          ? isGeneralFollowUp
+            ? "Sending follow-up…"
+            : "Sending…"
+          : "Refining…"
+      );
 
       try {
         const j = await apiPostJson("/api/rewrite", {
-          text,
+          text: requestText,
           model: modelEl?.value || "gpt-4.1-mini",
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
