@@ -517,7 +517,8 @@ RULES:
 `.trim(),
 
       path: `
-make better
+You are ChatGPT. Respond normally and helpfully.
+Make it sound better.
 `.trim()
     };
 
