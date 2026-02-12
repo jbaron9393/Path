@@ -391,7 +391,8 @@ app.post("/api/rewrite", async (req, res) => {
       temperature = 0.2,
       preset = "general",
       rules = "",
-      delimiter = "" // optional; empty means "single block"
+      delimiter = "", // optional; empty means "single block"
+      clientDateContext = null,
     } = req.body || {};
 
     if (!text || typeof text !== "string") return res.status(400).send("Missing text");
@@ -460,6 +461,30 @@ make betteR
 const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
 
+const serverNow = new Date();
+const serverDateContext = {
+  serverNowIso: serverNow.toISOString(),
+  serverNowUtc: serverNow.toUTCString(),
+};
+
+const safeClientDateContext =
+  clientDateContext && typeof clientDateContext === "object"
+    ? {
+        clientNowIso: String(clientDateContext.clientNowIso || "").trim(),
+        clientNowLocal: String(clientDateContext.clientNowLocal || "").trim(),
+        clientTimezone: String(clientDateContext.clientTimezone || "").trim(),
+      }
+    : null;
+
+const DATE_TIME_CONTEXT = [
+  "Current date/time context (use this when user asks for current day/time):",
+  `- serverNowIso: ${serverDateContext.serverNowIso}`,
+  `- serverNowUtc: ${serverDateContext.serverNowUtc}`,
+  `- clientNowIso: ${safeClientDateContext?.clientNowIso || "(not provided)"}`,
+  `- clientNowLocal: ${safeClientDateContext?.clientNowLocal || "(not provided)"}`,
+  `- clientTimezone: ${safeClientDateContext?.clientTimezone || "(not provided)"}`,
+].join("\n");
+
 // Rules box overrides preset instructions (optional)
 const system = userRules
   ? `You are a helpful assistant.
@@ -469,8 +494,12 @@ ABSOLUTE OVERRIDE MODE:
 - Output ONLY the response (no preface, no commentary, no quotes).
 
 USER RULES:
-${userRules}`.trim()
-  : presetSystem;
+${userRules}
+
+${DATE_TIME_CONTEXT}`.trim()
+  : `${presetSystem}
+
+${DATE_TIME_CONTEXT}`.trim();
 
 // User content
 const user = chunks.join("\n\n");
