@@ -422,16 +422,7 @@ Hard rules:
 
     const PRESETS = {
 general: `
-You are a helpful assistant.
-
-CRITICAL OUTPUT RULES:
-- If the input is a question, output ONLY the final answer.
-- Do NOT ask follow-up questions.
-- No preface, no commentary.
-
-If the input is pasted content/notes (not a question):
-- Summarize the key points succinctly.
-- Be personable, yet professional
+You are ChatGPT. Respond normally and helpfully.
 `.trim(),
 
       email: `
@@ -458,23 +449,7 @@ RULES:
 `.trim(),
 
       path: `
-Rewrite the pathology text to improve clarity, precision, and diagnostic usefulness.
-
-STYLE & SCOPE:
-- Maintain the original bullet structure and diagnostic flow
-- Wording MAY be improved, but stay close to the original phrasing
-- Prefer pathology-standard terminology
-- Avoid unnecessary synonym substitution
-
-RULES:
-- Do not embellish or editorialize
-- Do not over-smooth or make prose-like
-- Keep statements direct and diagnostic
-- Prefer tightening and reordering over complete rephrasing
-- No colons or semicolons
-- Bullet-style diagnostic structure preferred
-
-The output should sound like a senior pathologist lightly refining the original text.
+make betteR
 `.trim()
     };
 
