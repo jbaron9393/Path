@@ -254,6 +254,125 @@
             padding: 20px;
             text-align: center;
         }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #0f172a;
+                color: #e2e8f0;
+            }
+
+            .form-panel,
+            .preview-panel {
+                background: #111827;
+                border: 1px solid #334155;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+            }
+
+            .panel-header,
+            .selector-group label,
+            .form-group label {
+                color: #e2e8f0;
+            }
+
+            .selector-group {
+                border-bottom-color: #334155;
+            }
+
+            .selector-group select,
+            .form-group select,
+            .form-group input[type="text"],
+            .form-group textarea {
+                background: #0f172a;
+                color: #e2e8f0;
+                border-color: #475569;
+            }
+
+            .checkbox-item {
+                background: #1e293b;
+                border-color: #475569;
+                color: #e2e8f0;
+            }
+
+            .checkbox-item:hover {
+                background: #334155;
+            }
+
+            .checkbox-item.checked {
+                background: #3a2f18;
+                border-color: #CFB87C;
+            }
+
+            .preview-content {
+                background: #0b1220;
+                border-color: #334155;
+                color: #e2e8f0;
+            }
+
+            .footer,
+            .no-protocol,
+            .header-text p {
+                color: #cbd5e1;
+            }
+        }
+
+
+        html.dark body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        html.dark .form-panel,
+        html.dark .preview-panel {
+            background: #111827;
+            border: 1px solid #334155;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+        }
+
+        html.dark .panel-header,
+        html.dark .selector-group label,
+        html.dark .form-group label {
+            color: #e2e8f0;
+        }
+
+        html.dark .selector-group {
+            border-bottom-color: #334155;
+        }
+
+        html.dark .selector-group select,
+        html.dark .form-group select,
+        html.dark .form-group input[type="text"],
+        html.dark .form-group textarea {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-color: #475569;
+        }
+
+        html.dark .checkbox-item {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        html.dark .checkbox-item:hover {
+            background: #334155;
+        }
+
+        html.dark .checkbox-item.checked {
+            background: #3a2f18;
+            border-color: #CFB87C;
+        }
+
+        html.dark .preview-content {
+            background: #0b1220;
+            border-color: #334155;
+            color: #e2e8f0;
+        }
+
+        html.dark .footer,
+        html.dark .no-protocol,
+        html.dark .header-text p {
+            color: #cbd5e1;
+        }
     </style>
 </head>
 <body>
@@ -4423,6 +4542,16 @@
         updatePreview();
     }
 
+    function getCurrentReportTimestamp() {
+        const now = new Date();
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        return {
+            local: now.toLocaleString(),
+            iso: now.toISOString(),
+            timezone
+        };
+    }
+
     function updatePreview() {
         const system = document.getElementById('organSystem').value;
         const idx = document.getElementById('protocol').value;
@@ -4435,8 +4564,12 @@
 
         const protocol = protocolData[system][idx];
         let lines = [];
+        const reportTime = getCurrentReportTimestamp();
+
         lines.push('CAP SYNOPTIC REPORT');
         lines.push('Protocol: ' + protocol.name);
+        lines.push('Generated: ' + reportTime.local + ' (' + reportTime.timezone + ')');
+        lines.push('Generated (ISO): ' + reportTime.iso);
         lines.push('========================================');
         lines.push('');
 
@@ -4498,7 +4631,48 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', initApp);
+    function getThemeFromParentOrStorage() {
+        const fromParent = (() => {
+            try {
+                if (window.parent && window.parent !== window) {
+                    return window.parent.document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+                }
+            } catch (err) {
+                return null;
+            }
+            return null;
+        })();
+
+        if (fromParent) return fromParent;
+
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') return savedTheme;
+
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return prefersDark ? 'dark' : 'light';
+    }
+
+    function syncEmbeddedTheme() {
+        const theme = getThemeFromParentOrStorage();
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        syncEmbeddedTheme();
+        initApp();
+    });
+
+    window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (!event.data || event.data.type !== 'theme') return;
+        document.documentElement.classList.toggle('dark', event.data.theme === 'dark');
+    });
+
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'theme') syncEmbeddedTheme();
+    });
+
+    setInterval(syncEmbeddedTheme, 250);
     </script>
 </body>
 </html>

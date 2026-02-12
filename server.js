@@ -273,6 +273,75 @@ async function callOpenAIChat({ apiKey, model, temperature, system, user }) {
   return (j.choices?.[0]?.message?.content || "").trim();
 }
 
+function shouldUseWebSearch({ preset, user }) {
+  if (String(preset || "").toLowerCase() !== "general") return false;
+
+  const q = String(user || "").toLowerCase();
+  const realtimeHints = [
+    "current event",
+    "current events",
+    "latest news",
+    "breaking news",
+    "right now",
+    "today",
+    "this week",
+    "recent",
+    "recently",
+    "what happened",
+    "news about",
+  ];
+
+  return realtimeHints.some((hint) => q.includes(hint));
+}
+
+function shouldAnswerDateTimeDirectly({ preset, user }) {
+  if (String(preset || "").toLowerCase() !== "general") return false;
+
+  const q = String(user || "").toLowerCase();
+  const asksDate = /\b(what\s+day|what\s+date|date\s+is\s+it|today'?s\s+date|current\s+date)\b/.test(q);
+  const asksTime = /\b(what\s+time|time\s+is\s+it|current\s+time|time\s+now|right\s+now)\b/.test(q);
+
+  return asksDate || asksTime;
+}
+
+function formatDateTimeAnswer({ safeClientDateContext, serverDateContext }) {
+  if (safeClientDateContext?.clientNowLocal) {
+    const tz = safeClientDateContext.clientTimezone || "local timezone";
+    return `It is ${safeClientDateContext.clientNowLocal} (${tz}).`;
+  }
+
+  return `It is ${serverDateContext.serverNowUtc} (UTC), ISO: ${serverDateContext.serverNowIso}.`;
+}
+
+async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, user }) {
+  const r = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: Number(temperature) || 0.2,
+      tools: [{ type: "web_search" }],
+      input: [
+        { role: "system", content: String(system || "").trim() },
+        { role: "user", content: String(user || "").trim() },
+      ],
+    }),
+  });
+
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`OpenAI web search error ${r.status}: ${raw}`);
+
+  const data = JSON.parse(raw);
+  return (
+    data.output_text ??
+    data.output?.[0]?.content?.map((c) => c.text).join("") ??
+    ""
+  ).trim();
+}
+
 function splitByDelimiter(raw, delimiter = "===CARD===") {
   const d = String(delimiter || "===CARD===");
   return String(raw || "")
@@ -391,7 +460,8 @@ app.post("/api/rewrite", async (req, res) => {
       temperature = 0.2,
       preset = "general",
       rules = "",
-      delimiter = "" // optional; empty means "single block"
+      delimiter = "", // optional; empty means "single block"
+      clientDateContext = null,
     } = req.body || {};
 
     if (!text || typeof text !== "string") return res.status(400).send("Missing text");
@@ -460,6 +530,30 @@ make betteR
 const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
 
+const serverNow = new Date();
+const serverDateContext = {
+  serverNowIso: serverNow.toISOString(),
+  serverNowUtc: serverNow.toUTCString(),
+};
+
+const safeClientDateContext =
+  clientDateContext && typeof clientDateContext === "object"
+    ? {
+        clientNowIso: String(clientDateContext.clientNowIso || "").trim(),
+        clientNowLocal: String(clientDateContext.clientNowLocal || "").trim(),
+        clientTimezone: String(clientDateContext.clientTimezone || "").trim(),
+      }
+    : null;
+
+const DATE_TIME_CONTEXT = [
+  "Current date/time context (use this when user asks for current day/time):",
+  `- serverNowIso: ${serverDateContext.serverNowIso}`,
+  `- serverNowUtc: ${serverDateContext.serverNowUtc}`,
+  `- clientNowIso: ${safeClientDateContext?.clientNowIso || "(not provided)"}`,
+  `- clientNowLocal: ${safeClientDateContext?.clientNowLocal || "(not provided)"}`,
+  `- clientTimezone: ${safeClientDateContext?.clientTimezone || "(not provided)"}`,
+].join("\n");
+
 // Rules box overrides preset instructions (optional)
 const system = userRules
   ? `You are a helpful assistant.
@@ -469,20 +563,54 @@ ABSOLUTE OVERRIDE MODE:
 - Output ONLY the response (no preface, no commentary, no quotes).
 
 USER RULES:
-${userRules}`.trim()
-  : presetSystem;
+${userRules}
+
+${DATE_TIME_CONTEXT}`.trim()
+  : `${presetSystem}
+
+${DATE_TIME_CONTEXT}`.trim();
 
 // User content
 const user = chunks.join("\n\n");
 
-// Normal ChatGPT-style response for ALL presets
-let finalOut = await callOpenAIChat({
-  apiKey,
-  model,
-  temperature: Number(temperature) || 0.2,
-  system,
-  user,
-});
+if (shouldAnswerDateTimeDirectly({ preset: p, user })) {
+  return res.json({
+    text: formatDateTimeAnswer({ safeClientDateContext, serverDateContext }),
+  });
+}
+
+// Use web search for general + real-time/current-events style queries.
+const useWebSearch = shouldUseWebSearch({ preset: p, user });
+
+let finalOut;
+if (useWebSearch) {
+  try {
+    finalOut = await callOpenAIWithWebSearch({
+      apiKey,
+      model,
+      temperature: Number(temperature) || 0.2,
+      system,
+      user,
+    });
+  } catch (webErr) {
+    console.warn("Web search failed, falling back to chat completions:", webErr?.message || webErr);
+    finalOut = await callOpenAIChat({
+      apiKey,
+      model,
+      temperature: Number(temperature) || 0.2,
+      system,
+      user,
+    });
+  }
+} else {
+  finalOut = await callOpenAIChat({
+    apiKey,
+    model,
+    temperature: Number(temperature) || 0.2,
+    system,
+    user,
+  });
+}
 
 finalOut = String(finalOut || "").trim();
 
