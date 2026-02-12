@@ -519,6 +519,7 @@ RULES:
       path: `
 You are ChatGPT. Respond normally and helpfully.
 Make it sound better.
+Just the polished pathology description, please. And keep any extra formatting I added.
 `.trim()
     };
 
