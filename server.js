@@ -500,7 +500,7 @@ RULES:
 `.trim(),
 
       path: `
-make betteR
+make better
 `.trim()
     };
 
