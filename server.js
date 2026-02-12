@@ -273,6 +273,56 @@ async function callOpenAIChat({ apiKey, model, temperature, system, user }) {
   return (j.choices?.[0]?.message?.content || "").trim();
 }
 
+function shouldUseWebSearch({ preset, user }) {
+  if (String(preset || "").toLowerCase() !== "general") return false;
+
+  const q = String(user || "").toLowerCase();
+  const realtimeHints = [
+    "current event",
+    "current events",
+    "latest news",
+    "breaking news",
+    "right now",
+    "today",
+    "this week",
+    "recent",
+    "recently",
+    "what happened",
+    "news about",
+  ];
+
+  return realtimeHints.some((hint) => q.includes(hint));
+}
+
+async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, user }) {
+  const r = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: Number(temperature) || 0.2,
+      tools: [{ type: "web_search" }],
+      input: [
+        { role: "system", content: String(system || "").trim() },
+        { role: "user", content: String(user || "").trim() },
+      ],
+    }),
+  });
+
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`OpenAI web search error ${r.status}: ${raw}`);
+
+  const data = JSON.parse(raw);
+  return (
+    data.output_text ??
+    data.output?.[0]?.content?.map((c) => c.text).join("") ??
+    ""
+  ).trim();
+}
+
 function splitByDelimiter(raw, delimiter = "===CARD===") {
   const d = String(delimiter || "===CARD===");
   return String(raw || "")
@@ -504,14 +554,38 @@ ${DATE_TIME_CONTEXT}`.trim();
 // User content
 const user = chunks.join("\n\n");
 
-// Normal ChatGPT-style response for ALL presets
-let finalOut = await callOpenAIChat({
-  apiKey,
-  model,
-  temperature: Number(temperature) || 0.2,
-  system,
-  user,
-});
+// Use web search for general + real-time/current-events style queries.
+const useWebSearch = shouldUseWebSearch({ preset: p, user });
+
+let finalOut;
+if (useWebSearch) {
+  try {
+    finalOut = await callOpenAIWithWebSearch({
+      apiKey,
+      model,
+      temperature: Number(temperature) || 0.2,
+      system,
+      user,
+    });
+  } catch (webErr) {
+    console.warn("Web search failed, falling back to chat completions:", webErr?.message || webErr);
+    finalOut = await callOpenAIChat({
+      apiKey,
+      model,
+      temperature: Number(temperature) || 0.2,
+      system,
+      user,
+    });
+  }
+} else {
+  finalOut = await callOpenAIChat({
+    apiKey,
+    model,
+    temperature: Number(temperature) || 0.2,
+    system,
+    user,
+  });
+}
 
 finalOut = String(finalOut || "").trim();
 
