@@ -282,6 +282,9 @@ function shouldUseWebSearch({ preset, user }) {
     "current events",
     "latest news",
     "breaking news",
+    "current news",
+    "news today",
+    "in the news",
     "right now",
     "today",
     "this week",
@@ -292,6 +295,24 @@ function shouldUseWebSearch({ preset, user }) {
   ];
 
   return realtimeHints.some((hint) => q.includes(hint));
+}
+
+function extractResponseOutputText(data) {
+  const direct = String(data?.output_text || "").trim();
+  if (direct) return direct;
+
+  const outputs = Array.isArray(data?.output) ? data.output : [];
+  const texts = [];
+
+  for (const item of outputs) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const c of content) {
+      const t = typeof c?.text === "string" ? c.text : "";
+      if (t.trim()) texts.push(t);
+    }
+  }
+
+  return texts.join("\n").trim();
 }
 
 async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, user }) {
@@ -316,11 +337,7 @@ async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, use
   if (!r.ok) throw new Error(`OpenAI web search error ${r.status}: ${raw}`);
 
   const data = JSON.parse(raw);
-  return (
-    data.output_text ??
-    data.output?.[0]?.content?.map((c) => c.text).join("") ??
-    ""
-  ).trim();
+  return extractResponseOutputText(data);
 }
 
 function splitByDelimiter(raw, delimiter = "===CARD===") {
@@ -527,12 +544,14 @@ const safeClientDateContext =
     : null;
 
 const DATE_TIME_CONTEXT = [
-  "Current date/time context (use this when user asks for current day/time):",
+  "Current date/time context:",
   `- serverNowIso: ${serverDateContext.serverNowIso}`,
   `- serverNowUtc: ${serverDateContext.serverNowUtc}`,
   `- clientNowIso: ${safeClientDateContext?.clientNowIso || "(not provided)"}`,
   `- clientNowLocal: ${safeClientDateContext?.clientNowLocal || "(not provided)"}`,
   `- clientTimezone: ${safeClientDateContext?.clientTimezone || "(not provided)"}`,
+  "When the user asks for today's date/day/time, answer strictly from this context.",
+  "If both server and client values are present, prefer the client values for 'today' and local time.",
 ].join("\n");
 
 // Rules box overrides preset instructions (optional)
