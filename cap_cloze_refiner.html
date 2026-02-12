@@ -641,6 +641,7 @@ Card 3 text..."
       <section class="tab-panel hidden" data-panel="synoptic">
         <div class="w-full h-[80vh] border border-slate-200 rounded-xl overflow-hidden bg-white">
           <iframe
+            id="synopticFrame"
             src="/cap_synoptic_generator.html"
             class="w-full h-full"
             frameborder="0"
@@ -677,6 +678,11 @@ Card 3 text..."
       root.classList.toggle("dark", isDark);
       if (themeIcon) themeIcon.textContent = isDark ? "☀️" : "🌙";
       if (themeLabel) themeLabel.textContent = isDark ? "Light" : "Dark";
+
+      const synopticFrame = document.getElementById("synopticFrame");
+      if (synopticFrame && synopticFrame.contentWindow) {
+        synopticFrame.contentWindow.postMessage({ type: "theme", theme: mode }, window.location.origin);
+      }
     }
 
     // Initialize from saved preference, else OS preference
@@ -686,6 +692,16 @@ Card 3 text..."
     } else {
       const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
       applyTheme(prefersDark ? "dark" : "light");
+    }
+
+    const synopticFrame = document.getElementById("synopticFrame");
+    if (synopticFrame) {
+      synopticFrame.addEventListener("load", () => {
+        const mode = root.classList.contains("dark") ? "dark" : "light";
+        if (synopticFrame.contentWindow) {
+          synopticFrame.contentWindow.postMessage({ type: "theme", theme: mode }, window.location.origin);
+        }
+      });
     }
 
     if (toggleBtn) {
