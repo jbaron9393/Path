@@ -63,6 +63,15 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter(Boolean);
   }
 
+  function getClientDateContext() {
+    const now = new Date();
+    return {
+      clientNowIso: now.toISOString(),
+      clientNowLocal: now.toLocaleString(),
+      clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    };
+  }
+
   function refreshStats() {
     const n = splitCards(bulkInput.value).length;
     inputStats.textContent = `${n} card${n === 1 ? "" : "s"} detected`;
@@ -189,6 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
         temperature: Number(tempEl.value),
         delimiter: getDelimiter(),
         extraRules: extraRulesEl?.value || "",
+        clientDateContext: getClientDateContext(),
       });
       const resultText = j.text ?? j.output ?? "";
       const cards = splitCards(resultText);
@@ -568,6 +578,7 @@ document.addEventListener("DOMContentLoaded", () => {
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
           rules: rwRules.value || "",
+          clientDateContext: getClientDateContext(),
         });
         rwOutput.value = (j.text ?? "").trim();
         rwCopy.disabled = !rwOutput.value.trim();
