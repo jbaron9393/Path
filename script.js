@@ -518,9 +518,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (fromDataset) return fromDataset;
 
       const fromRenderedText = String(rwOutput?.innerText || "")
-        .replace(/ /g, " ")
+        .replace(/\u00A0/g, " ")
+        .replace(/\r\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
         .trim();
       return fromRenderedText;
+    }
+
+    function stripMarkdownForCopy(text) {
+      return text
+        .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/__(.*?)__/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1")
+        .trim();
+    }
+
+    function getRwOutputPlainText() {
+      const normalized = String(rwOutput?.innerText || "")
+        .replace(/\u00A0/g, " ")
+        .replace(/\r\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      return stripMarkdownForCopy(normalized);
     }
 
     function setPresetActive(preset) {
@@ -589,8 +610,14 @@ document.addEventListener("DOMContentLoaded", () => {
     rwCopy.disabled = true;
     const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
+    rwOutput.addEventListener("input", () => {
+      const liveText = getRwOutputRaw();
+      rwOutput.dataset.raw = liveText;
+      rwCopy.disabled = !liveText;
+    });
+
     rwCopy.addEventListener("click", async () => {
-      const text = getRwOutputRaw();
+      const text = getRwOutputPlainText() || getRwOutputRaw();
       if (!text) return;
 
       try {
