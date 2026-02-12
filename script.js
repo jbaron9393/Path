@@ -642,7 +642,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (!text) return setStatus("Type a question or paste text first.");
 
-      const previousAnswer = getRwOutputRaw();
+      const previousAnswer = (rwOutput.value || "").trim();
       const isGeneralFollowUp = rwPreset === "general" && previousAnswer.length > 0;
       const requestText = isGeneralFollowUp
         ? `You previously answered:\n\n${previousAnswer}\n\nFollow-up question:\n${text}`
