@@ -294,25 +294,6 @@ function shouldUseWebSearch({ preset, user }) {
   return realtimeHints.some((hint) => q.includes(hint));
 }
 
-function shouldAnswerDateTimeDirectly({ preset, user }) {
-  if (String(preset || "").toLowerCase() !== "general") return false;
-
-  const q = String(user || "").toLowerCase();
-  const asksDate = /\b(what\s+day|what\s+date|date\s+is\s+it|today'?s\s+date|current\s+date)\b/.test(q);
-  const asksTime = /\b(what\s+time|time\s+is\s+it|current\s+time|time\s+now|right\s+now)\b/.test(q);
-
-  return asksDate || asksTime;
-}
-
-function formatDateTimeAnswer({ safeClientDateContext, serverDateContext }) {
-  if (safeClientDateContext?.clientNowLocal) {
-    const tz = safeClientDateContext.clientTimezone || "local timezone";
-    return `It is ${safeClientDateContext.clientNowLocal} (${tz}).`;
-  }
-
-  return `It is ${serverDateContext.serverNowUtc} (UTC), ISO: ${serverDateContext.serverNowIso}.`;
-}
-
 async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, user }) {
   const r = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -519,7 +500,7 @@ RULES:
 `.trim(),
 
       path: `
-make betteR
+make better
 `.trim()
     };
 
@@ -572,12 +553,6 @@ ${DATE_TIME_CONTEXT}`.trim();
 
 // User content
 const user = chunks.join("\n\n");
-
-if (shouldAnswerDateTimeDirectly({ preset: p, user })) {
-  return res.json({
-    text: formatDateTimeAnswer({ safeClientDateContext, serverDateContext }),
-  });
-}
 
 // Use web search for general + real-time/current-events style queries.
 const useWebSearch = shouldUseWebSearch({ preset: p, user });
