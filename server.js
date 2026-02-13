@@ -770,6 +770,9 @@ if (finalOut.endsWith("?")) {
   finalOut = String(finalOut || "").trim();
 }
 
+if (ADAPTIVE_PRESETS.has(p) && finalOut) {
+  await appendPersistedLearningExample(p, text, finalOut);
+}
 
   // Single block mode
   if (!d) return res.json({ text: finalOut });
