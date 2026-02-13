@@ -458,6 +458,7 @@ app.post("/api/rewrite", async (req, res) => {
       temperature = 0.2,
       preset = "general",
       rules = "",
+      template = "",
       delimiter = "", // optional; empty means "single block"
       clientDateContext = null,
     } = req.body || {};
@@ -529,6 +530,7 @@ Just the polished pathology description, please. And keep any extra formatting I
 // =======================
 const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
+const microTemplate = p === "micro" ? String(template || "").trim() : "";
 
 const serverNow = new Date();
 const serverDateContext = {
@@ -562,13 +564,25 @@ const system = userRules
 
 ABSOLUTE OVERRIDE MODE:
 - Follow ONLY the user's rules below. They override all other instructions.
+- If a micro template is provided, follow its structure and section ordering exactly when possible.
 - Output ONLY the response (no preface, no commentary, no quotes).
 
 USER RULES:
 ${userRules}
 
+${microTemplate ? `MICRO TEMPLATE:
+${microTemplate}
+` : ""}
+
 ${DATE_TIME_CONTEXT}`.trim()
   : `${presetSystem}
+
+${microTemplate
+    ? `If a MICRO TEMPLATE is provided, mirror its structure, section names, and ordering while preserving the source findings.
+
+MICRO TEMPLATE:
+${microTemplate}`
+    : ""}
 
 ${DATE_TIME_CONTEXT}`.trim();
 

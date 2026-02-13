@@ -404,6 +404,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwRun = document.getElementById("rwRun");
   const rwClear = document.getElementById("rwClear");
   const rwRules = document.getElementById("rwRules");
+  const rwTemplateWrap = document.getElementById("rwTemplateWrap");
+  const rwTemplate = document.getElementById("rwTemplate");
   const rwKeepRules = document.getElementById("rwKeepRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
@@ -429,6 +431,16 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = "Ask anything or paste text here";
       rwRules.placeholder =
         "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
+      if (rwTemplate) {
+        rwTemplate.placeholder =
+          "Optional template for micro findings output (structure, headings, format)…";
+      }
+    }
+
+    function syncTemplateVisibility(preset) {
+      if (!rwTemplateWrap) return;
+      const isMicro = preset === "micro";
+      rwTemplateWrap.classList.toggle("hidden", !isMicro);
     }
 
     function applyRulesForPreset(_preset) {
@@ -566,6 +578,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwOutput.dataset.raw = "";
       rwCopy.disabled = true;
       if (clearRules) rwRules.value = "";
+      if (rwTemplate && rwPreset !== "micro") rwTemplate.value = "";
     }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwInput)
@@ -654,6 +667,7 @@ document.addEventListener("DOMContentLoaded", () => {
         setPresetActive(rwPreset);
         applyRulesForPreset(rwPreset);
         setPlaceholdersForPreset(rwPreset);
+        syncTemplateVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
 
         setStatus(`Rewriter mode: ${rwPreset}`);
@@ -698,6 +712,7 @@ document.addEventListener("DOMContentLoaded", () => {
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
           rules: rwRules.value || "",
+          template: rwPreset === "micro" ? rwTemplate?.value || "" : "",
           clientDateContext: getClientDateContext(),
         });
         const renderedOutput = renderOutputRichText(j.text ?? "");
@@ -718,6 +733,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setPresetActive("general");
     applyRulesForPreset("general");
     setPlaceholdersForPreset("general");
+    syncTemplateVisibility("general");
     setRunButtonLabel("general");
 
     // Keep session warm so long-idle tabs still respond quickly.
