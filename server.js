@@ -3,12 +3,70 @@ console.log("Loaded server.js from:", process.cwd());
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
+import { promises as fs } from "fs";
 import { fileURLToPath } from "url";
 
 dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const ADAPTIVE_PRESETS = new Set(["micro", "gross", "path"]);
+const LEARNING_DIR = path.join(__dirname, "data");
+const LEARNING_FILE = path.join(LEARNING_DIR, "rewrite_learning.json");
+const MAX_PERSISTED_EXAMPLES_PER_PRESET = 600;
+
+function normalizeLearningExample(input, output) {
+  const safeInput = String(input || "").trim().slice(0, 1400);
+  const safeOutput = String(output || "").trim().slice(0, 2400);
+  if (!safeInput || !safeOutput) return null;
+  return { input: safeInput, output: safeOutput };
+}
+
+async function loadLearningStore() {
+  try {
+    const raw = await fs.readFile(LEARNING_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    if (err?.code === "ENOENT") return {};
+    console.warn("Failed to load rewrite learning store:", err?.message || err);
+    return {};
+  }
+}
+
+async function saveLearningStore(store) {
+  try {
+    await fs.mkdir(LEARNING_DIR, { recursive: true });
+    await fs.writeFile(LEARNING_FILE, JSON.stringify(store, null, 2), "utf8");
+  } catch (err) {
+    console.warn("Failed to save rewrite learning store:", err?.message || err);
+  }
+}
+
+async function getPersistedLearningExamples(preset, limit = 8) {
+  if (!ADAPTIVE_PRESETS.has(preset)) return [];
+  const store = await loadLearningStore();
+  const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+  return bucket.slice(-Math.max(1, limit));
+}
+
+async function appendPersistedLearningExample(preset, input, output) {
+  if (!ADAPTIVE_PRESETS.has(preset)) return;
+  const normalized = normalizeLearningExample(input, output);
+  if (!normalized) return;
+
+  const store = await loadLearningStore();
+  const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+
+  bucket.push({
+    ...normalized,
+    savedAt: new Date().toISOString(),
+  });
+
+  store[preset] = bucket.slice(-MAX_PERSISTED_EXAMPLES_PER_PRESET);
+  await saveLearningStore(store);
+}
 
 // Safe env debug (does NOT print the key itself)
 const k = process.env.OPENAI_API_KEY || "";
@@ -459,6 +517,7 @@ app.post("/api/rewrite", async (req, res) => {
       preset = "general",
       rules = "",
       template = "",
+      learningExamples = [],
       delimiter = "", // optional; empty means "single block"
       clientDateContext = null,
     } = req.body || {};
@@ -531,6 +590,27 @@ Just the polished pathology description, please. And keep any extra formatting I
 const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
 const microTemplate = p === "micro" ? String(template || "").trim() : "";
+const clientLearningExamples = ADAPTIVE_PRESETS.has(p) && Array.isArray(learningExamples)
+  ? learningExamples
+      .slice(-5)
+      .map((ex) => normalizeLearningExample(ex?.input, ex?.output))
+      .filter(Boolean)
+  : [];
+
+const persistedLearningExamples = await getPersistedLearningExamples(p, 10);
+const normalizedLearningExamples = [...persistedLearningExamples, ...clientLearningExamples].slice(-12);
+
+const LEARNING_CONTEXT = normalizedLearningExamples.length
+  ? [
+      "Adaptive style context from prior accepted rewrites for this preset:",
+      ...normalizedLearningExamples.map((ex, idx) =>
+        `Example ${idx + 1}:\nInput:\n${ex.input}\n\nOutput:\n${ex.output}`
+      ),
+      "Use this style context to improve consistency for this user's future rewrites.",
+      "Do not copy examples verbatim when they conflict with the current source text.",
+    ].join("\n\n")
+  : "";
+
 
 const serverNow = new Date();
 const serverDateContext = {
@@ -574,7 +654,9 @@ ${microTemplate ? `MICRO TEMPLATE:
 ${microTemplate}
 ` : ""}
 
-${DATE_TIME_CONTEXT}`.trim()
+${DATE_TIME_CONTEXT}
+
+${LEARNING_CONTEXT}`.trim()
   : `${presetSystem}
 
 ${microTemplate
@@ -584,7 +666,9 @@ MICRO TEMPLATE:
 ${microTemplate}`
     : ""}
 
-${DATE_TIME_CONTEXT}`.trim();
+${DATE_TIME_CONTEXT}
+
+${LEARNING_CONTEXT}`.trim();
 
 // User content
 const user = chunks.join("\n\n");
@@ -636,6 +720,9 @@ if (finalOut.endsWith("?")) {
   finalOut = String(finalOut || "").trim();
 }
 
+if (ADAPTIVE_PRESETS.has(p) && finalOut) {
+  await appendPersistedLearningExample(p, text, finalOut);
+}
 
   // Single block mode
   if (!d) return res.json({ text: finalOut });

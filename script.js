@@ -410,6 +410,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
 
+  const LEARNING_PRESETS = new Set(["micro", "gross", "path"]);
+  const LEARNING_KEY = "rwPresetLearning";
+
   if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
     // Preserve each preset button's original classes (padding/rounded/etc.)
     rwPresetBtns.forEach((btn) => {
@@ -441,6 +444,46 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!rwTemplateWrap) return;
       const isMicro = preset === "micro";
       rwTemplateWrap.classList.toggle("hidden", !isMicro);
+    }
+
+    function loadLearningStore() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(LEARNING_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveLearningStore(store) {
+      localStorage.setItem(LEARNING_KEY, JSON.stringify(store));
+    }
+
+    function addLearningExample(preset, inputText, outputText) {
+      if (!LEARNING_PRESETS.has(preset)) return;
+
+      const cleanedInput = String(inputText || "").trim();
+      const cleanedOutput = String(outputText || "").trim();
+      if (!cleanedInput || !cleanedOutput) return;
+
+      const store = loadLearningStore();
+      const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+      bucket.push({
+        input: cleanedInput.slice(0, 1400),
+        output: cleanedOutput.slice(0, 2400),
+        savedAt: new Date().toISOString(),
+      });
+
+      store[preset] = bucket.slice(-20);
+      saveLearningStore(store);
+    }
+
+    function getLearningExamples(preset) {
+      if (!LEARNING_PRESETS.has(preset)) return [];
+
+      const store = loadLearningStore();
+      const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+      return bucket.slice(-5);
     }
 
     function applyRulesForPreset(_preset) {
@@ -713,12 +756,14 @@ document.addEventListener("DOMContentLoaded", () => {
           preset: rwPreset,
           rules: rwRules.value || "",
           template: rwPreset === "micro" ? rwTemplate?.value || "" : "",
+          learningExamples: getLearningExamples(rwPreset),
           clientDateContext: getClientDateContext(),
         });
         const renderedOutput = renderOutputRichText(j.text ?? "");
         rwOutput.innerHTML = renderedOutput.html;
         rwOutput.dataset.raw = renderedOutput.normalized;
         rwCopy.disabled = !renderedOutput.normalized;
+        addLearningExample(rwPreset, text, renderedOutput.normalized);
         setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
