@@ -340,7 +340,19 @@
               focus:bg-white dark:focus:bg-slate-900 transition-all"
             ></div>
 
-            <div class="flex justify-end mt-2">
+            <div class="flex justify-end gap-2 mt-2">
+              <button
+                id="rwCorrected"
+                type="button"
+                disabled
+                class="inline-flex items-center gap-1.5 px-3 py-1.5
+                       bg-emerald-100 hover:bg-emerald-200
+                       text-emerald-800 text-xs font-medium rounded-lg
+                       transition-all disabled:opacity-50"
+              >
+                Save Corrected
+              </button>
+
               <button
                 id="rwCopy"
                 type="button"
@@ -395,6 +407,26 @@
 </label>
 
 </div>
+
+            <div id="rwTemplateWrap" class="hidden space-y-1">
+              <label
+                for="rwTemplate"
+                class="text-sm font-semibold text-slate-700 dark:text-slate-200"
+              >
+                Template (Micro)
+              </label>
+              <textarea
+                id="rwTemplate"
+                placeholder="Optional template for micro findings output…"
+                class="w-full h-28 px-3 py-2
+                bg-slate-50 dark:bg-slate-900
+                border border-slate-200 dark:border-slate-700
+                rounded-xl font-sans text-[15px] leading-relaxed tracking-tight
+                text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500
+                resize-y focus:outline-none focus:ring-2 focus:ring-primary-500
+                focus:bg-white dark:focus:bg-slate-900 transition-all"
+              ></textarea>
+            </div>
 
             <textarea
               id="rwRules"

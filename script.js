@@ -404,11 +404,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwRun = document.getElementById("rwRun");
   const rwClear = document.getElementById("rwClear");
   const rwRules = document.getElementById("rwRules");
+  const rwTemplateWrap = document.getElementById("rwTemplateWrap");
+  const rwTemplate = document.getElementById("rwTemplate");
   const rwKeepRules = document.getElementById("rwKeepRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
+  const rwCorrected = document.getElementById("rwCorrected");
 
-  if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwPresetBtns.length) {
+  const LEARNING_PRESETS = new Set(["micro", "gross", "path"]);
+  const LEARNING_KEY = "rwPresetLearning";
+
+  if (rwInput && rwOutput && rwRun && rwClear && rwRules && rwCopy && rwCorrected && rwPresetBtns.length) {
     // Preserve each preset button's original classes (padding/rounded/etc.)
     rwPresetBtns.forEach((btn) => {
       btn.dataset.baseClass = btn.className;
@@ -429,6 +435,66 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = "Ask anything or paste text here";
       rwRules.placeholder =
         "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
+      if (rwTemplate) {
+        rwTemplate.placeholder =
+          "Optional template for micro findings output (structure, headings, format)…";
+      }
+    }
+
+    function syncTemplateVisibility(preset) {
+      if (!rwTemplateWrap) return;
+      const isMicro = preset === "micro";
+      rwTemplateWrap.classList.toggle("hidden", !isMicro);
+    }
+
+    function loadLearningStore() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(LEARNING_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveLearningStore(store) {
+      localStorage.setItem(LEARNING_KEY, JSON.stringify(store));
+    }
+
+    function addLearningExample(preset, inputText, outputText) {
+      if (!LEARNING_PRESETS.has(preset)) return;
+
+      const cleanedInput = String(inputText || "").trim();
+      const cleanedOutput = String(outputText || "").trim();
+      if (!cleanedInput || !cleanedOutput) return;
+
+      const store = loadLearningStore();
+      const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+      bucket.push({
+        input: cleanedInput.slice(0, 1400),
+        output: cleanedOutput.slice(0, 2400),
+        savedAt: new Date().toISOString(),
+      });
+
+      store[preset] = bucket.slice(-20);
+      saveLearningStore(store);
+    }
+
+    function getLearningExamples(preset) {
+      if (!LEARNING_PRESETS.has(preset)) return [];
+
+      const store = loadLearningStore();
+      const bucket = Array.isArray(store[preset]) ? store[preset] : [];
+      return bucket.slice(-5);
+    }
+
+    function isAdaptivePreset(preset) {
+      return LEARNING_PRESETS.has(preset);
+    }
+
+    function updateCorrectedButtonState() {
+      const hasInput = String(rwInput?.value || "").trim().length > 0;
+      const hasOutput = String(getRwOutputRaw() || "").trim().length > 0;
+      rwCorrected.disabled = !(isAdaptivePreset(rwPreset) && hasInput && hasOutput);
     }
 
     function applyRulesForPreset(_preset) {
@@ -565,7 +631,9 @@ document.addEventListener("DOMContentLoaded", () => {
       rwOutput.innerHTML = "";
       rwOutput.dataset.raw = "";
       rwCopy.disabled = true;
+      rwCorrected.disabled = true;
       if (clearRules) rwRules.value = "";
+      if (rwTemplate && rwPreset !== "micro") rwTemplate.value = "";
     }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwInput)
@@ -608,12 +676,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Copy output
     rwCopy.disabled = true;
+    rwCorrected.disabled = true;
     const rwCopyOriginal = { className: rwCopy.className, text: rwCopy.textContent };
 
     rwOutput.addEventListener("input", () => {
       const liveText = getRwOutputRaw();
       rwOutput.dataset.raw = liveText;
       rwCopy.disabled = !liveText;
+      updateCorrectedButtonState();
     });
 
     rwCopy.addEventListener("click", async () => {
@@ -636,6 +706,51 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    const rwCorrectedOriginal = {
+      className: rwCorrected.className,
+      text: rwCorrected.textContent,
+    };
+
+    rwCorrected.addEventListener("click", async () => {
+      const sourceText = String(rwInput.value || "").trim();
+      const correctedText = String(getRwOutputRaw() || "").trim();
+
+      if (!isAdaptivePreset(rwPreset)) {
+        return setStatus("Save Corrected is only for Micro, Gross, and Path presets.");
+      }
+      if (!sourceText || !correctedText) {
+        return setStatus("Need both input and corrected output to save learning.");
+      }
+
+      rwCorrected.disabled = true;
+      rwCorrected.textContent = "Saving…";
+
+      try {
+        await apiPostJson("/api/rewrite/learn", {
+          preset: rwPreset,
+          input: sourceText,
+          output: correctedText,
+        });
+
+        addLearningExample(rwPreset, sourceText, correctedText);
+        rwCorrected.textContent = "Saved ✓";
+        rwCorrected.className = rwCorrectedOriginal.className + " bg-emerald-600 text-white";
+        setStatus(`Saved corrected example for ${rwPreset}.`);
+
+        setTimeout(() => {
+          rwCorrected.textContent = rwCorrectedOriginal.text;
+          rwCorrected.className = rwCorrectedOriginal.className;
+          updateCorrectedButtonState();
+        }, 500);
+      } catch (err) {
+        console.error("Save corrected failed:", err);
+        setStatus("Save corrected failed: " + (err?.message || String(err)));
+        rwCorrected.textContent = rwCorrectedOriginal.text;
+        rwCorrected.className = rwCorrectedOriginal.className;
+        updateCorrectedButtonState();
+      }
+    });
+
     // Preset buttons (clear on change; keep rules if toggle on)
     rwPresetBtns.forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -654,7 +769,9 @@ document.addEventListener("DOMContentLoaded", () => {
         setPresetActive(rwPreset);
         applyRulesForPreset(rwPreset);
         setPlaceholdersForPreset(rwPreset);
+        syncTemplateVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
+        updateCorrectedButtonState();
 
         setStatus(`Rewriter mode: ${rwPreset}`);
       });
@@ -698,12 +815,15 @@ document.addEventListener("DOMContentLoaded", () => {
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
           rules: rwRules.value || "",
+          template: rwPreset === "micro" ? rwTemplate?.value || "" : "",
+          learningExamples: getLearningExamples(rwPreset),
           clientDateContext: getClientDateContext(),
         });
         const renderedOutput = renderOutputRichText(j.text ?? "");
         rwOutput.innerHTML = renderedOutput.html;
         rwOutput.dataset.raw = renderedOutput.normalized;
         rwCopy.disabled = !renderedOutput.normalized;
+        updateCorrectedButtonState();
         setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
@@ -718,7 +838,9 @@ document.addEventListener("DOMContentLoaded", () => {
     setPresetActive("general");
     applyRulesForPreset("general");
     setPlaceholdersForPreset("general");
+    syncTemplateVisibility("general");
     setRunButtonLabel("general");
+    updateCorrectedButtonState();
 
     // Keep session warm so long-idle tabs still respond quickly.
     const keepAliveMs = 4 * 60 * 1000;
