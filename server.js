@@ -15,6 +15,40 @@ const ADAPTIVE_PRESETS = new Set(["micro", "gross", "path"]);
 const LEARNING_DIR = path.join(__dirname, "data");
 const LEARNING_FILE = path.join(LEARNING_DIR, "rewrite_learning.json");
 const MAX_PERSISTED_EXAMPLES_PER_PRESET = 600;
+const STYLE_SEED_FILE = path.join(LEARNING_DIR, "style_seed.json");
+let styleSeedLibrary = { micro: [], gross: [], path: [] };
+
+function normalizeStyleSnippet(text) {
+  const v = String(text || "").trim().replace(/\r\n/g, "\n");
+  if (!v) return "";
+  return v.slice(0, 1200);
+}
+
+function normalizeStyleSeedLibrary(raw) {
+  const out = { micro: [], gross: [], path: [] };
+  for (const preset of ADAPTIVE_PRESETS) {
+    const arr = Array.isArray(raw?.[preset]) ? raw[preset] : [];
+    out[preset] = arr
+      .map((item) => normalizeStyleSnippet(item))
+      .filter(Boolean)
+      .slice(-400);
+  }
+  return out;
+}
+
+async function loadStyleSeedLibrary() {
+  try {
+    const raw = await fs.readFile(STYLE_SEED_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    styleSeedLibrary = normalizeStyleSeedLibrary(parsed);
+    console.log("Loaded style seed library from", STYLE_SEED_FILE);
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      console.warn("Failed to load style seed library:", err?.message || err);
+    }
+    styleSeedLibrary = { micro: [], gross: [], path: [] };
+  }
+}
 
 function normalizeLearningExample(input, output) {
   const safeInput = String(input || "").trim().slice(0, 1400);
@@ -611,6 +645,18 @@ const LEARNING_CONTEXT = normalizedLearningExamples.length
     ].join("\n\n")
   : "";
 
+const styleSeedSnippets = Array.isArray(styleSeedLibrary?.[p])
+  ? styleSeedLibrary[p].slice(-12)
+  : [];
+
+const STYLE_SEED_CONTEXT = styleSeedSnippets.length
+  ? [
+      "Curated long-term style snippets provided by the user:",
+      ...styleSeedSnippets.map((snippet, idx) => `Style Snippet ${idx + 1}:\n${snippet}`),
+      "Match this writing style while staying faithful to the current source text.",
+    ].join("\n\n")
+  : "";
+
 
 const serverNow = new Date();
 const serverDateContext = {
@@ -656,7 +702,9 @@ ${microTemplate}
 
 ${DATE_TIME_CONTEXT}
 
-${LEARNING_CONTEXT}`.trim()
+${LEARNING_CONTEXT}
+
+${STYLE_SEED_CONTEXT}`.trim()
   : `${presetSystem}
 
 ${microTemplate
@@ -668,7 +716,9 @@ ${microTemplate}`
 
 ${DATE_TIME_CONTEXT}
 
-${LEARNING_CONTEXT}`.trim();
+${LEARNING_CONTEXT}
+
+${STYLE_SEED_CONTEXT}`.trim();
 
 // User content
 const user = chunks.join("\n\n");
@@ -771,8 +821,23 @@ app.post("/api/rewrite/learn", async (req, res) => {
   }
 });
 
+app.post("/api/rewrite/reload-style-seed", async (_req, res) => {
+  try {
+    await loadStyleSeedLibrary();
+    return res.json({ ok: true, counts: {
+      micro: styleSeedLibrary.micro.length,
+      gross: styleSeedLibrary.gross.length,
+      path: styleSeedLibrary.path.length,
+    } });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 // ---- LISTEN ----
 const PORT = process.env.PORT || 3000;
+
+await loadStyleSeedLibrary();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

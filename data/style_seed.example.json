@@ -1,0 +1,12 @@
+{
+  "micro": [
+    "Microscopic description template phrase example...",
+    "Another micro style snippet..."
+  ],
+  "gross": [
+    "Gross description style snippet example..."
+  ],
+  "path": [
+    "Final diagnosis style snippet example..."
+  ]
+}
