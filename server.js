@@ -750,6 +750,27 @@ return res.json({ text: fixed });
   }
 });
 
+app.post("/api/rewrite/learn", async (req, res) => {
+  try {
+    const { preset = "", input = "", output = "" } = req.body || {};
+    const p = String(preset || "").toLowerCase().trim();
+
+    if (!ADAPTIVE_PRESETS.has(p)) {
+      return res.status(400).json({ error: "Preset must be micro, gross, or path." });
+    }
+
+    const normalized = normalizeLearningExample(input, output);
+    if (!normalized) {
+      return res.status(400).json({ error: "Both input and output are required." });
+    }
+
+    await appendPersistedLearningExample(p, normalized.input, normalized.output);
+    return res.json({ ok: true, preset: p });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 // ---- LISTEN ----
 const PORT = process.env.PORT || 3000;
 
