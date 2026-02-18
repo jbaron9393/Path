@@ -16,7 +16,7 @@ Create a .env file (not committed):
 
 OPENAI\_API\_KEY=PASTE\_YOUR\_KEY\_HERE  
 
-APP\_PASSWORD=SET\_A\_PASSWORD\_HERE  
+APP\_USERNAME=SET\_A\_USERNAME\_OR\_PATH\_HERE  
 
 
 
