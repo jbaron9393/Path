@@ -111,46 +111,149 @@ console.log("OPENAI_API_KEY length:", k.length);
 // ---- app init ----
 const app = express();
 app.use(express.json({ limit: "4mb" }));
-app.use(express.static(__dirname));
+app.use(express.urlencoded({ extended: false }));
 
-// ---- password gate ----
-const APP_PASSWORD = process.env.APP_PASSWORD;
+// ---- simple username gate ----
+const APP_LOGIN_ID = String(
+  process.env.APP_USERNAME || process.env.APP_PATH || process.env.APP_PASSWORD || "",
+).trim();
+const AUTH_COOKIE_NAME = "cloze_refiner_login";
 
-function requirePassword(req, res, next) {
-  if (!APP_PASSWORD) return next();
+function parseCookies(cookieHeader = "") {
+  return String(cookieHeader)
+    .split(";")
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .reduce((acc, pair) => {
+      const i = pair.indexOf("=");
+      if (i < 0) return acc;
+      const key = pair.slice(0, i).trim();
+      const value = pair.slice(i + 1).trim();
+      if (!key) return acc;
+      acc[key] = decodeURIComponent(value);
+      return acc;
+    }, {});
+}
 
-  const auth = req.headers.authorization;
+function isAuthenticated(req) {
+  if (!APP_LOGIN_ID) return true;
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies[AUTH_COOKIE_NAME] === APP_LOGIN_ID;
+}
 
-  if (!auth || !auth.startsWith("Basic ")) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Cloze Refiner"');
-    return res.status(401).send("Password required");
+function setLoginCookie(res, { remember = false } = {}) {
+  const maxAge = remember ? 60 * 60 * 24 * 30 : null;
+  const parts = [
+    `${AUTH_COOKIE_NAME}=${encodeURIComponent(APP_LOGIN_ID)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+  if (maxAge) parts.push(`Max-Age=${maxAge}`);
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+function clearLoginCookie(res) {
+  res.setHeader(
+    "Set-Cookie",
+    `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+  );
+}
+
+function requireLogin(req, res, next) {
+  if (isAuthenticated(req)) return next();
+  if (req.path.startsWith("/api/")) {
+    return res.status(401).json({ error: "Login required" });
+  }
+  return res.redirect("/login");
+}
+
+function renderLoginPage(errorText = "") {
+  const safeError = errorText
+    ? `<p style="color:#b91c1c;margin:0 0 12px;">${errorText}</p>`
+    : "";
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cloze Refiner Login</title>
+  </head>
+  <body style="font-family:Arial,sans-serif;background:#f8fafc;display:grid;place-items:center;min-height:100vh;margin:0;">
+    <form method="post" action="/api/login" style="width:min(420px,92vw);background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+      <h1 style="margin:0 0 6px;font-size:20px;">Sign in</h1>
+      <p style="margin:0 0 16px;color:#475569;">Enter your username/path to open Cloze Refiner.</p>
+      ${safeError}
+      <label for="username" style="display:block;font-weight:600;margin-bottom:6px;">Username (path)</label>
+      <input id="username" name="username" type="text" required autofocus style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;" />
+      <label style="display:flex;align-items:center;gap:8px;margin:14px 0 16px;color:#334155;">
+        <input type="checkbox" name="remember" value="1" />
+        Remember me on this browser
+      </label>
+      <button type="submit" style="width:100%;padding:10px 12px;border:0;border-radius:8px;background:#0f766e;color:#fff;font-weight:600;cursor:pointer;">Continue</button>
+    </form>
+  </body>
+</html>`;
+}
+
+app.get("/login", (req, res) => {
+  if (!APP_LOGIN_ID) return res.redirect("/");
+  if (isAuthenticated(req)) return res.redirect("/");
+  return res.status(200).type("html").send(renderLoginPage());
+});
+
+app.post("/api/login", (req, res) => {
+  if (!APP_LOGIN_ID) return res.redirect("/");
+  const fromBody = req.body && typeof req.body === "object" ? req.body : {};
+  const fromQuery = req.query && typeof req.query === "object" ? req.query : {};
+
+  const username = String(fromBody.username || fromQuery.username || "").trim();
+  const rememberRaw = fromBody.remember ?? fromQuery.remember;
+  const remember = rememberRaw === "1" || rememberRaw === "true" || rememberRaw === true;
+
+  if (username !== APP_LOGIN_ID) {
+    return res.status(401).type("html").send(renderLoginPage("Wrong username/path."));
   }
 
-  const decoded = Buffer.from(auth.split(" ")[1], "base64").toString("utf8");
-  const [, password] = decoded.split(":");
+  setLoginCookie(res, { remember });
+  return res.redirect("/");
+});
 
-  if (password !== APP_PASSWORD) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Cloze Refiner"');
-    return res.status(401).send("Wrong password");
-  }
+app.post("/api/logout", (_req, res) => {
+  clearLoginCookie(res);
+  return res.status(200).json({ ok: true });
+});
 
-  next();
+app.get("/logout", (_req, res) => {
+  clearLoginCookie(res);
+  return res.redirect("/login");
+});
+
+if (APP_LOGIN_ID) {
+  console.log("Login gate enabled (username/path required).");
+}
+
+if (!APP_LOGIN_ID) {
+  console.log("Login gate disabled (APP_USERNAME/APP_PATH/APP_PASSWORD not set).");
 }
 
 // Health check public
 app.get("/health", (req, res) => res.status(200).send("ok"));
 
-// Apply auth to everything else
-app.use(requirePassword);
+// Apply auth to protected app content and API routes
+app.use(requireLogin);
 
-// Authenticated ping used by the browser tab to keep auth/session paths warm.
-app.get("/api/ping", (_req, res) => {
-  res.status(200).json({ ok: true });
-});
+// Static files protected behind login
+app.use(express.static(__dirname));
 
 // Homepage
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "cap_cloze_refiner.html"));
+});
+
+// Authenticated ping used by the browser tab to keep auth/session paths warm.
+app.get("/api/ping", (_req, res) => {
+  res.status(200).json({ ok: true });
 });
 
 const RULES = `
