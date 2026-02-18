@@ -588,13 +588,13 @@ You are ChatGPT. Respond normally and helpfully.
 `.trim(),
 
       email: `
-Professional email tone.
-Polite but direct.
+Make it sound better. 
 `.trim(),
 
       micro: `
 Make a better microscopic description used for a pathology report. 
 Sound like an experienced pathologist describing what they see at sign-out.
+Keep similar structure and style to what is provided. 
 No emdashes. 
 `.trim(),
 
@@ -604,16 +604,15 @@ Rewrite a pathology gross description to be clear and concise.
 RULES:
 - Keep all measurements, laterality, specimen parts, and identifiers exactly correct
 - Do not invent findings
-- Prefer standard surgical pathology gross style
 - Use complete sentences
 - Keep orientation/ink/margins information explicit
+- Keep similar structure and style to what is provided
 - Avoid em dashes and bullets
 `.trim(),
 
       path: `
-You are ChatGPT. Respond normally and helpfully.
 Make it sound better.
-Just the polished pathology description, please. And keep any extra formatting I added.
+Keep any extra formatting I added.
 `.trim()
     };
 
@@ -691,7 +690,6 @@ const system = userRules
 ABSOLUTE OVERRIDE MODE:
 - Follow ONLY the user's rules below. They override all other instructions.
 - If a micro template is provided, follow its structure and section ordering exactly when possible.
-- Output ONLY the response (no preface, no commentary, no quotes).
 
 USER RULES:
 ${userRules}
