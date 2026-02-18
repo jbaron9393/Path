@@ -184,7 +184,7 @@ function renderLoginPage(errorText = "") {
       <h1 style="margin:0 0 6px;font-size:20px;">Sign in</h1>
       <p style="margin:0 0 16px;color:#475569;">Enter your username/path to open Cloze Refiner.</p>
       ${safeError}
-      <label for="username" style="display:block;font-weight:600;margin-bottom:6px;">Username (path)</label>
+      <label for="username" style="display:block;font-weight:600;margin-bottom:6px;">Username</label>
       <input id="username" name="username" type="text" required autofocus style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;" />
       <label style="display:flex;align-items:center;gap:8px;margin:14px 0 16px;color:#334155;">
         <input type="checkbox" name="remember" value="1" />
