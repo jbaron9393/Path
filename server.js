@@ -918,9 +918,9 @@ const system = userRules
 
 ABSOLUTE OVERRIDE MODE:
 - Follow ONLY the user's rules in the Rules Override box.
-- If a Template is provided, you must follow the Template’s structure and section ordering exactly.
-- If the Rules Override conflicts with the Template structure, the Template controls formatting and section order, and the Rules Override controls tone, length, and stylistic preferences within those sections.
-- Do not add content not supported by the input text unless explicitly instructed to generate an example.
+- The only exception: if a Template is provided, you must also follow the template’s structure and section ordering exactly.
+- If the Rules Override conflicts with the Template structure, the Template structure wins for formatting, and the Rules Override wins for tone/length/style within those sections.
+- Do not add content not supported by the input text.
 
 USER RULES:
 ${userRules}

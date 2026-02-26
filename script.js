@@ -646,13 +646,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (rwTemplate && rwPreset !== "micro" && rwPreset !== "gross") rwTemplate.value = "";
     }
 
-    // Enter = submit, Ctrl/Cmd + Enter = newline (rwInput)
+    // Enter = submit, Shift + Enter = newline (rwInput)
     rwInput.addEventListener("keydown", (e) => {
-      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      const isShiftEnter = e.shiftKey;
       const isEnter = e.key === "Enter" || e.key === "NumpadEnter";
       if (!isEnter) return;
 
-      if (isCmdOrCtrl) {
+      if (isShiftEnter) {
         e.preventDefault();
         const start = rwInput.selectionStart ?? rwInput.value.length;
         const end = rwInput.selectionEnd ?? rwInput.value.length;
