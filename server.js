@@ -755,7 +755,7 @@ EXAMPLE GENERATION MODE:
   Received [fresh for frozen section diagnosis/tissue banking/in formalin] in a container labeled [patients name/MRN/designation],
   Fill in accordingly based off of input
 - Use realistic but generic findings.
-- For any estimated measurements not given place [...]
+- For any estimated measurements not given place [x]
 - Follow standard academic surgical pathology gross structure.
 
 --------------------------------------------------
