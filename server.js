@@ -722,6 +722,11 @@ OPENING SENTENCE RULE:
   “Sections demonstrate…”
   “Histologic evaluation reveals…”
 - Do not use any other opening phrasing unless explicitly instructed by the user.
+
+DIAGNOSTIC LANGUAGE RULES:
+
+- Do NOT restate the diagnosis within the microscopic description.
+- Do not conclude with a diagnostic statement.
 `.trim(),
 
       gross: `
