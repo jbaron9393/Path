@@ -715,6 +715,13 @@ Universal rules:
 Formatting:
 - Output only the microscopic description text.
 - Default output is narrative paragraphs (not bullets), unless a template is provided.
+
+OPENING SENTENCE RULE:
+- The microscopic description must begin with one of the following phrases:
+  “Sections show…”
+  “Sections demonstrate…”
+  “Histologic evaluation reveals…”
+- Do not use any other opening phrasing unless explicitly instructed by the user.
 `.trim(),
 
       gross: `
