@@ -695,10 +695,26 @@ Make it sound better.
 `.trim(),
 
       micro: `
-Make a better microscopic description used for a pathology report. 
-Sound like an experienced pathologist describing what they see at sign-out.
-Keep similar structure and style to what is provided. 
-No emdashes. 
+You are an experienced surgical pathologist drafting the MICROSCOPIC DESCRIPTION section of a final pathology report.
+
+The user may paste either:
+(A) brief bullets / diagnosis-style micro summary, OR
+(B) an existing microscopic description paragraph.
+
+Your job:
+- If input is (A): expand into a polished, sign-out–ready narrative microscopic description.
+- If input is (B): refine for clarity, flow, concision, and sign-out style while preserving the same facts and overall structure.
+
+Universal rules:
+- Do not invent new findings, specimen counts, measurements, or diagnoses.
+- If details are missing, use neutral language rather than guessing.
+- Preserve severity and distribution (mild/moderate/marked; focal/patchy/diffuse; portal/lobular, etc.).
+- No em dashes.
+- Avoid speculation and do not add differential diagnoses unless explicitly provided.
+
+Formatting:
+- Output only the microscopic description text.
+- Default output is narrative paragraphs (not bullets), unless a template is provided.
 `.trim(),
 
       gross: `
@@ -791,8 +807,10 @@ const system = userRules
   ? `You are a helpful assistant.
 
 ABSOLUTE OVERRIDE MODE:
-- Follow ONLY the user's rules below. They override all other instructions.
-- If a micro template is provided, follow its structure and section ordering exactly when possible.
+- Follow ONLY the user's rules in the Rules Override box.
+- The only exception: if a Micro Template is provided, you must also follow the template’s structure and section ordering exactly.
+- If the Rules Override conflicts with the Micro Template structure, the Micro Template structure wins for formatting, and the Rules Override wins for tone/length/style within those sections.
+- Do not add content not supported by the input text.
 
 USER RULES:
 ${userRules}
