@@ -405,6 +405,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwClear = document.getElementById("rwClear");
   const rwRules = document.getElementById("rwRules");
   const rwTemplateWrap = document.getElementById("rwTemplateWrap");
+  const rwTemplateLabel = document.getElementById("rwTemplateLabel");
   const rwTemplate = document.getElementById("rwTemplate");
   const rwKeepRules = document.getElementById("rwKeepRules");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
@@ -436,15 +437,24 @@ document.addEventListener("DOMContentLoaded", () => {
       rwRules.placeholder =
         "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
       if (rwTemplate) {
-        rwTemplate.placeholder =
-          "Optional template for micro findings output (structure, headings, format)…";
+        if (_preset === "gross") {
+          rwTemplate.placeholder =
+            "Optional template for gross description output (structure, sections, format)…";
+        } else {
+          rwTemplate.placeholder =
+            "Optional template for micro findings output (structure, headings, format)…";
+        }
       }
     }
 
     function syncTemplateVisibility(preset) {
       if (!rwTemplateWrap) return;
-      const isMicro = preset === "micro";
-      rwTemplateWrap.classList.toggle("hidden", !isMicro);
+      const supportsTemplate = preset === "micro" || preset === "gross";
+      rwTemplateWrap.classList.toggle("hidden", !supportsTemplate);
+
+      if (rwTemplateLabel) {
+        rwTemplateLabel.textContent = preset === "gross" ? "Template (Gross)" : "Template (Micro)";
+      }
     }
 
     function loadLearningStore() {
@@ -633,7 +643,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwCopy.disabled = true;
       rwCorrected.disabled = true;
       if (clearRules) rwRules.value = "";
-      if (rwTemplate && rwPreset !== "micro") rwTemplate.value = "";
+      if (rwTemplate && rwPreset !== "micro" && rwPreset !== "gross") rwTemplate.value = "";
     }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwInput)
@@ -815,7 +825,7 @@ document.addEventListener("DOMContentLoaded", () => {
           temperature: Number(tempEl?.value) || 0.2,
           preset: rwPreset,
           rules: rwRules.value || "",
-          template: rwPreset === "micro" ? rwTemplate?.value || "" : "",
+          template: rwPreset === "micro" || rwPreset === "gross" ? rwTemplate?.value || "" : "",
           learningExamples: getLearningExamples(rwPreset),
           clientDateContext: getClientDateContext(),
         });

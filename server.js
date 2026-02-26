@@ -741,7 +741,7 @@ Keep any extra formatting I added.
 // =======================
 const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
-const microTemplate = p === "micro" ? String(template || "").trim() : "";
+const presetTemplate = (p === "micro" || p === "gross") ? String(template || "").trim() : "";
 const clientLearningExamples = ADAPTIVE_PRESETS.has(p) && Array.isArray(learningExamples)
   ? learningExamples
       .slice(-5)
@@ -808,15 +808,15 @@ const system = userRules
 
 ABSOLUTE OVERRIDE MODE:
 - Follow ONLY the user's rules in the Rules Override box.
-- The only exception: if a Micro Template is provided, you must also follow the template’s structure and section ordering exactly.
-- If the Rules Override conflicts with the Micro Template structure, the Micro Template structure wins for formatting, and the Rules Override wins for tone/length/style within those sections.
+- The only exception: if a Template is provided, you must also follow the template’s structure and section ordering exactly.
+- If the Rules Override conflicts with the Template structure, the Template structure wins for formatting, and the Rules Override wins for tone/length/style within those sections.
 - Do not add content not supported by the input text.
 
 USER RULES:
 ${userRules}
 
-${microTemplate ? `MICRO TEMPLATE:
-${microTemplate}
+${presetTemplate ? `TEMPLATE:
+${presetTemplate}
 ` : ""}
 
 ${DATE_TIME_CONTEXT}
@@ -826,11 +826,11 @@ ${LEARNING_CONTEXT}
 ${STYLE_SEED_CONTEXT}`.trim()
   : `${presetSystem}
 
-${microTemplate
-    ? `If a MICRO TEMPLATE is provided, mirror its structure, section names, and ordering while preserving the source findings.
+${presetTemplate
+    ? `If a TEMPLATE is provided, mirror its structure, section names, and ordering while preserving the source findings.
 
-MICRO TEMPLATE:
-${microTemplate}`
+TEMPLATE:
+${presetTemplate}`
     : ""}
 
 ${DATE_TIME_CONTEXT}
