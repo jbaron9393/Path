@@ -178,6 +178,7 @@ function renderLoginPage(errorText = "") {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Cloze Refiner Login</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body style="font-family:Arial,sans-serif;background:#f8fafc;display:grid;place-items:center;min-height:100vh;margin:0;">
     <form method="post" action="/api/login" style="width:min(420px,92vw);background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;box-shadow:0 8px 24px rgba(15,23,42,.08);">
