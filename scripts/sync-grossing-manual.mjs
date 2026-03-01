@@ -14,7 +14,7 @@ function runGit(args, cwd = repoRoot) {
   execFileSync("git", args, { cwd, stdio: "inherit" });
 }
 
-function syncGrossingManual() {
+export function syncGrossingManualVendor() {
   mkdirSync(vendorDir, { recursive: true });
 
   const hasGitRepo = existsSync(path.join(manualDir, ".git"));
@@ -32,10 +32,12 @@ function syncGrossingManual() {
   runGit(["-C", manualDir, "reset", "--hard", "origin/main"]);
 }
 
-try {
-  syncGrossingManual();
-  console.log("Grossing Manual synced to vendor/Grossing-Manual");
-} catch (err) {
-  console.error("Failed to sync Grossing Manual:", err?.message || err);
-  process.exit(1);
+if (process.argv[1] === __filename) {
+  try {
+    syncGrossingManualVendor();
+    console.log("Grossing Manual synced to vendor/Grossing-Manual");
+  } catch (err) {
+    console.error("Failed to sync Grossing Manual:", err?.message || err);
+    process.exit(1);
+  }
 }

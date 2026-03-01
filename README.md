@@ -54,7 +54,9 @@ The app now serves the Grossing Manual under the same domain at `/grossing-manua
 
 ### Sync vendored content
 
-Run this before deployment (or in Render build command):
+The server now attempts to auto-sync the vendor folder on startup and on the first `/grossing-manual` request if files are missing.
+
+You can also run a manual sync:
 
 ```bash
 npm run sync:grossing-manual
@@ -62,14 +64,14 @@ npm run sync:grossing-manual
 
 ### Render build/deploy notes
 
-Use a build command that installs dependencies and syncs the manual repo:
+Recommended Render build/start:
 
 ```bash
+# Build
 npm ci && npm run sync:grossing-manual
-```
 
-Then start as usual:
-
-```bash
+# Start
 npm start
 ```
+
+If the build-time sync is skipped, startup auto-sync still attempts to fetch the manual.
