@@ -46,3 +46,32 @@ Notes:
 - This is best for curated style snippets from your own docs (including content copied from Word).
 - Confirmed examples saved with **Save Corrected** still persist to `data/rewrite_learning.json`.
 - Both the curated seed file and saved corrections are used together to steer future output style.
+
+
+## Grossing Manual integration
+
+The app now serves the Grossing Manual under the same domain at `/grossing-manual` (no iframe).
+
+### Sync vendored content
+
+The server now attempts to auto-sync the vendor folder on startup and on the first `/grossing-manual` request if files are missing.
+
+You can also run a manual sync:
+
+```bash
+npm run sync:grossing-manual
+```
+
+### Render build/deploy notes
+
+Recommended Render build/start:
+
+```bash
+# Build
+npm ci && npm run sync:grossing-manual
+
+# Start
+npm start
+```
+
+If the build-time sync is skipped, startup auto-sync still attempts to fetch the manual.

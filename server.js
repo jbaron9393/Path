@@ -3,8 +3,9 @@ console.log("Loaded server.js from:", process.cwd());
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
-import { promises as fs } from "fs";
+import { existsSync, promises as fs } from "fs";
 import { fileURLToPath } from "url";
+import { syncGrossingManualVendor } from "./scripts/sync-grossing-manual.mjs";
 
 dotenv.config({ override: true });
 
@@ -13,10 +14,31 @@ const __dirname = path.dirname(__filename);
 
 const ADAPTIVE_PRESETS = new Set(["micro", "gross", "path"]);
 const LEARNING_DIR = path.join(__dirname, "data");
+const GROSSING_MANUAL_DIR = path.join(__dirname, "vendor", "Grossing-Manual");
 const LEARNING_FILE = path.join(LEARNING_DIR, "rewrite_learning.json");
 const MAX_PERSISTED_EXAMPLES_PER_PRESET = 600;
 const STYLE_SEED_FILE = path.join(LEARNING_DIR, "style_seed.json");
 let styleSeedLibrary = { micro: [], gross: [], path: [] };
+let grossingManualSyncPromise = null;
+
+function ensureGrossingManualSynced() {
+  const indexPath = path.join(GROSSING_MANUAL_DIR, "index.html");
+  if (existsSync(indexPath)) return Promise.resolve(true);
+  if (grossingManualSyncPromise) return grossingManualSyncPromise;
+
+  grossingManualSyncPromise = Promise.resolve()
+    .then(() => syncGrossingManualVendor())
+    .then(() => existsSync(indexPath))
+    .catch((err) => {
+      console.warn("Grossing Manual sync failed:", err?.message || err);
+      return false;
+    })
+    .finally(() => {
+      grossingManualSyncPromise = null;
+    });
+
+  return grossingManualSyncPromise;
+}
 
 function normalizeStyleSnippet(text) {
   const v = String(text || "").trim().replace(/\r\n/g, "\n");
@@ -246,6 +268,35 @@ app.use(requireLogin);
 
 // Static files protected behind login
 app.use(express.static(__dirname));
+
+// Grossing Manual mounted under same domain (no iframe).
+app.use("/grossing-manual", express.static(GROSSING_MANUAL_DIR));
+
+app.get("/grossing-manual", async (_req, res) => {
+  const indexPath = path.join(GROSSING_MANUAL_DIR, "index.html");
+  if (!existsSync(indexPath)) {
+    await ensureGrossingManualSynced();
+  }
+
+  if (!existsSync(indexPath)) {
+    return res.status(503).send(
+      "Grossing Manual is still syncing. Please retry in a few seconds.",
+    );
+  }
+
+  return res.sendFile(indexPath);
+});
+
+app.get("/grossing-manual/*", async (_req, res, next) => {
+  const indexPath = path.join(GROSSING_MANUAL_DIR, "index.html");
+  if (!existsSync(indexPath)) {
+    await ensureGrossingManualSynced();
+  }
+  if (!existsSync(indexPath)) return next();
+  return res.sendFile(indexPath);
+});
+
+ensureGrossingManualSynced().catch(() => {});
 
 // Homepage
 app.get("/", (req, res) => {
