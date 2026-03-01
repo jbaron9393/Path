@@ -5,7 +5,8 @@
   "description": "Local proxy to forward requests to OpenAI for cap_cloze_refiner.html",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "sync:grossing-manual": "node scripts/sync-grossing-manual.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

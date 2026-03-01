@@ -3,7 +3,7 @@ console.log("Loaded server.js from:", process.cwd());
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
-import { promises as fs } from "fs";
+import { existsSync, promises as fs } from "fs";
 import { fileURLToPath } from "url";
 
 dotenv.config({ override: true });
@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 
 const ADAPTIVE_PRESETS = new Set(["micro", "gross", "path"]);
 const LEARNING_DIR = path.join(__dirname, "data");
+const GROSSING_MANUAL_DIR = path.join(__dirname, "vendor", "Grossing-Manual");
 const LEARNING_FILE = path.join(LEARNING_DIR, "rewrite_learning.json");
 const MAX_PERSISTED_EXAMPLES_PER_PRESET = 600;
 const STYLE_SEED_FILE = path.join(LEARNING_DIR, "style_seed.json");
@@ -246,6 +247,26 @@ app.use(requireLogin);
 
 // Static files protected behind login
 app.use(express.static(__dirname));
+
+// Grossing Manual mounted under same domain (no iframe).
+app.use("/grossing-manual", express.static(GROSSING_MANUAL_DIR));
+
+app.get("/grossing-manual", (_req, res) => {
+  const indexPath = path.join(GROSSING_MANUAL_DIR, "index.html");
+  if (!existsSync(indexPath)) {
+    return res.status(503).send(
+      "Grossing Manual is not synced yet. Run `npm run sync:grossing-manual` during deploy/build.",
+    );
+  }
+
+  return res.sendFile(indexPath);
+});
+
+app.get("/grossing-manual/*", (_req, res, next) => {
+  const indexPath = path.join(GROSSING_MANUAL_DIR, "index.html");
+  if (!existsSync(indexPath)) return next();
+  return res.sendFile(indexPath);
+});
 
 // Homepage
 app.get("/", (req, res) => {
