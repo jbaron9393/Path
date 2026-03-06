@@ -2769,29 +2769,34 @@
     name: "Pancreas (Exocrine)",
     pdf: "https://documents.cap.org/documents/New-Cancer-Protocols-June-2025/Panc.Exo_4.3.0.0.REL_CAPCP.pdf",
     fields: [
-        { id: "reportingTemplate", label: "Reporting Template", type: "text" },
-        { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text" },
-        { id: "caseSummary", label: "Case Summary", type: "text" },
-        { id: "standards", label: "Standard(s)", type: "text" },
+        { id: "reportingTemplate", label: "Reporting Template", type: "text", placeholder: "Protocol Posting Date: June 2025" },
+        { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text", placeholder: "June 2025" },
+        { id: "caseSummary", label: "CASE SUMMARY", type: "text", placeholder: "(PANCREAS (EXOCRINE))" },
+        { id: "standards", label: "Standard(s)", type: "select", options: [
+            "AJCC 8"
+        ]},
         { id: "procedure", label: "SPECIMEN - Procedure", type: "select", options: [
             "Excisional biopsy (enucleation)",
             "Pancreaticoduodenectomy (Whipple resection), partial pancreatectomy",
             "Total pancreatectomy",
             "Partial pancreatectomy, pancreatic body",
             "Partial pancreatectomy, pancreatic tail",
+            "Distal pancreatectomy",
             "Other (specify)",
             "Not specified"
         ]},
-        { id: "tumorSite", label: "TUMOR - Tumor Site (select all that apply)", type: "checkbox", options: [
+        { id: "tumorSite", label: "Tumor Site", type: "select", options: [
             "Pancreatic head",
             "Uncinate process",
             "Pancreatic body",
             "Pancreatic tail",
+            "Pancreatic body and tail",
             "Other (specify)",
             "Cannot be determined",
             "Not specified"
         ]},
         { id: "histologicType", label: "Histologic Type", type: "select", options: [
+            "Ductal adenocarcinoma",
             "Ductal adenocarcinoma, NOS",
             "Colloid carcinoma (mucinous carcinoma)",
             "Poorly cohesive carcinoma",
@@ -2826,18 +2831,18 @@
             "Other (specify)",
             "GX, cannot be assessed"
         ]},
-        { id: "tumorSizeType", label: "Tumor Size - Pattern", type: "select", options: [
+        { id: "tumorSizeType", label: "Tumor Size", type: "select", options: [
             "Unifocal invasive carcinoma",
             "Multifocal invasive carcinoma in association with intraductal neoplasms / mucinous cystic neoplasm",
             "Cannot be determined"
         ]},
-        { id: "tumorSizeGreatestCm", label: "Greatest Dimension in Centimeters (cm)", type: "text" },
+        { id: "tumorSizeGreatestCm", label: "Greatest dimension in Centimeters (cm)", type: "text", placeholder: "***" },
         { id: "tumorSizeAdditionalCm", label: "Additional Dimension in Centimeters (cm)", type: "text" },
         { id: "tumorSizeLargestFocusCm", label: "Largest Focus of Invasive Carcinoma (cm)", type: "text" },
         { id: "tumorSizeAggregateCm", label: "Aggregate Size of All Foci (cm)", type: "text" },
         { id: "tumorSizePercent", label: "Invasive Component as Percentage of Entire Tumor (%)", type: "text" },
         { id: "tumorSizeExplain", label: "Tumor Size Cannot be Determined (explain)", type: "text" },
-        { id: "directExtension", label: "Site(s) Involved by Direct Tumor Extension (select all that apply)", type: "checkbox", options: [
+        { id: "directExtension", label: "Site(s) Involved by Direct Tumor Extension", type: "select", options: [
             "No invasion (carcinoma in situ / high-grade dysplasia)",
             "Confined to pancreas",
             "Vascular bed / groove (SMV / portal vein)",
@@ -2886,7 +2891,7 @@
             "Cannot be determined"
         ]},
         { id: "tumorComment", label: "Tumor Comment", type: "textarea" },
-        { id: "marginStatusInvasive", label: "MARGINS - Margin Status for Invasive Carcinoma", type: "select", options: [
+        { id: "marginStatusInvasive", label: "Margin Status for Invasive Carcinoma", type: "select", options: [
             "All margins negative for invasive carcinoma",
             "Invasive carcinoma present at margin",
             "Not applicable"
@@ -2938,7 +2943,7 @@
             "Cannot be determined"
         ]},
         { id: "marginComment", label: "Margin Comment", type: "textarea" },
-        { id: "regionalNodeStatus", label: "REGIONAL LYMPH NODES - Status", type: "select", options: [
+        { id: "regionalNodeStatus", label: "Regional Lymph Node Status", type: "select", options: [
             "Not applicable (no regional lymph nodes submitted or found)",
             "Regional lymph nodes present",
             "All regional lymph nodes negative for tumor",
@@ -2947,7 +2952,7 @@
         { id: "lymphNodesPositive", label: "Number of Lymph Nodes with Tumor", type: "text" },
         { id: "lymphNodesExamined", label: "Number of Lymph Nodes Examined", type: "text" },
         { id: "regionalNodeComment", label: "Regional Lymph Node Comment", type: "textarea" },
-        { id: "distantSites", label: "DISTANT METASTASIS - Site(s) Involved", type: "checkbox", options: [
+        { id: "distantSites", label: "Distant Site(s) Involved, if applicable", type: "checkbox", options: [
             "Not applicable",
             "Non-regional lymph node(s)",
             "Liver",
@@ -2988,7 +2993,8 @@
         ]},
         { id: "additionalFindings", label: "Additional Findings (select all that apply)", type: "checkbox", options: [
             "None identified",
-            "Pancreatic intraepithelial neoplasia (PanIN) (specify highest grade)",
+            "Pancreatic intraepithelial neoplasia (PanIN): Low-grade",
+            "Pancreatic intraepithelial neoplasia (PanIN): High-grade",
             "Chronic pancreatitis",
             "Acute pancreatitis",
             "Other (specify)"
@@ -4624,6 +4630,8 @@
         lines.push('========================================');
         lines.push('');
 
+        const fieldValues = {};
+
         protocol.fields.forEach(field => {
             let value = '';
 
@@ -4649,10 +4657,45 @@
                 if (el) value = el.value.trim();
             }
 
-            if (value) {
+            fieldValues[field.id] = value;
+
+            if (value && protocol.name !== 'Pancreas (Exocrine)') {
                 lines.push(field.label + ': ' + value);
             }
         });
+
+        if (protocol.name === 'Pancreas (Exocrine)') {
+            const addLine = (label, value) => {
+                if (value) lines.push(label + ': ' + value);
+            };
+            lines = [];
+            lines.push('CASE SUMMARY: ' + (fieldValues.caseSummary || '(PANCREAS (EXOCRINE))'));
+            addLine('Standard(s)', fieldValues.standards || 'AJCC 8');
+            lines.push('========================================');
+            addLine('Procedure', fieldValues.procedure);
+            addLine('Tumor Site', fieldValues.tumorSite);
+            addLine('Histologic Type', fieldValues.histologicType);
+            addLine('Histologic Grade', fieldValues.histologicGrade);
+            if (fieldValues.tumorSizeType || fieldValues.tumorSizeGreatestCm) {
+                const tumorSizeSummary = [fieldValues.tumorSizeType, fieldValues.tumorSizeGreatestCm ? 'Greatest dimension in Centimeters (cm): ' + fieldValues.tumorSizeGreatestCm : ''].filter(Boolean).join('; ');
+                addLine('Tumor Size', tumorSizeSummary);
+            }
+            addLine('Site(s) Involved by Direct Tumor Extension', fieldValues.directExtension);
+            addLine('Lymphatic and / or Vascular Invasion', fieldValues.lvi);
+            addLine('Perineural Invasion', fieldValues.pni);
+            addLine('Treatment Effect', fieldValues.treatmentEffect);
+            addLine('Margin Status for Invasive Carcinoma', fieldValues.marginStatusInvasive);
+            addLine('Margin Status for Dysplasia and Intraepithelial Neoplasia', fieldValues.marginStatusDysplasia);
+            addLine('Regional Lymph Node Status', fieldValues.regionalNodeStatus);
+            addLine('Number of Lymph Nodes with Tumor', fieldValues.lymphNodesPositive);
+            addLine('Number of Lymph Nodes Examined', fieldValues.lymphNodesExamined);
+            addLine('Distant Site(s) Involved, if applicable', fieldValues.distantSites);
+            addLine('Modified Classification', fieldValues.modifiedClassification);
+            if (fieldValues.pT) lines.push(fieldValues.pT);
+            if (fieldValues.pN) lines.push(fieldValues.pN);
+            addLine('Additional Findings', fieldValues.additionalFindings);
+            lines.push('========================================');
+        }
 
         document.getElementById('previewContent').textContent = lines.join('\n');
     }
