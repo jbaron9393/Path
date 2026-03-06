@@ -4339,6 +4339,9 @@
             name: "Bone, Biopsy",
             pdf: "https://documents.cap.org/protocols/Bone.Bx_4.2.0.0.REL_CAPCP.pdf",
             fields: [
+                { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text", placeholder: "June 2025" },
+                { id: "caseSummary", label: "CASE SUMMARY", type: "text" },
+                { id: "standards", label: "Standard(s)", type: "select", options: ["AJCC 8"] },
                 { id: "tumorSite", label: "Tumor Site", type: "select", options: ["Long bones (upper extremity)", "Long bones (lower extremity)", "Pelvis", "Spine", "Ribs", "Skull", "Scapula", "Other", "See Comment"] },
                 { id: "histologicType", label: "Histologic Type", type: "select", options: [
                     "Osteosarcoma, conventional (osteoblastic)",
@@ -4373,6 +4376,9 @@
             name: "Bone, Resection",
             pdf: "https://documents.cap.org/protocols/Bone_4.2.0.0.REL_CAPCP.pdf",
             fields: [
+                { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text", placeholder: "June 2025" },
+                { id: "caseSummary", label: "CASE SUMMARY", type: "text" },
+                { id: "standards", label: "Standard(s)", type: "select", options: ["AJCC 8"] },
                 { id: "procedure", label: "Procedure", type: "select", options: ["Intralesional curettage", "Marginal excision", "Wide excision", "Radical resection", "Amputation", "Other", "See Comment"] },
                 { id: "tumorSite", label: "Tumor Site", type: "select", options: ["Long bones (upper extremity)", "Long bones (lower extremity)", "Pelvis", "Spine", "Ribs", "Skull", "Scapula", "Other", "See Comment"] },
                 { id: "tumorSize", label: "Tumor Size (cm)", type: "text" },
@@ -4413,6 +4419,9 @@
             name: "Soft Tissue, Biopsy",
             pdf: "https://documents.cap.org/protocols/Soft.Tissue.Bx_4.2.0.0.REL_CAPCP.pdf",
             fields: [
+                { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text", placeholder: "June 2025" },
+                { id: "caseSummary", label: "CASE SUMMARY", type: "text" },
+                { id: "standards", label: "Standard(s)", type: "select", options: ["AJCC 8"] },
                 { id: "tumorSite", label: "Tumor Site", type: "select", options: ["Upper extremity", "Lower extremity", "Trunk wall", "Retroperitoneum", "Head/Neck", "Intra-abdominal", "Other", "See Comment"] },
                 { id: "tumorDepth", label: "Tumor Depth", type: "select", options: ["Superficial (above fascia)", "Deep (below fascia)", "Both", "Cannot be determined", "See Comment"] },
                 { id: "histologicType", label: "Histologic Type", type: "select", options: [
@@ -4446,23 +4455,52 @@
             name: "Soft Tissue, Resection",
             pdf: "https://documents.cap.org/protocols/Soft.Tissue_4.2.0.0.REL_CAPCP.pdf",
             fields: [
+                { id: "protocolPostingDate", label: "Protocol Posting Date", type: "text", placeholder: "June 2025" },
+                { id: "caseSummary", label: "CASE SUMMARY", type: "text" },
+                { id: "standards", label: "Standard(s)", type: "select", options: ["AJCC 8"] },
                 { id: "procedure", label: "Procedure", type: "select", options: ["Excision", "Wide excision", "Radical resection", "Amputation", "Other", "See Comment"] },
                 { id: "tumorSite", label: "Tumor Site", type: "select", options: ["Upper extremity", "Lower extremity", "Trunk wall", "Retroperitoneum", "Head/Neck", "Intra-abdominal", "Other", "See Comment"] },
                 { id: "tumorDepth", label: "Tumor Depth", type: "select", options: ["Superficial (above fascia)", "Deep (below fascia)", "Both", "See Comment"] },
                 { id: "tumorSize", label: "Tumor Size (cm)", type: "text" },
                 { id: "histologicType", label: "Histologic Type", type: "select", options: [
                     "Undifferentiated pleomorphic sarcoma",
-                    "Liposarcoma, well-differentiated/atypical lipomatous tumor",
+                    "Undifferentiated spindle cell sarcoma",
+                    "Undifferentiated round cell sarcoma",
+                    "Undifferentiated epithelioid sarcoma",
+                    "Undifferentiated sarcoma, NOS",
+                    "Liposarcoma, well-differentiated / atypical lipomatous tumor",
                     "Liposarcoma, dedifferentiated",
                     "Liposarcoma, myxoid",
                     "Liposarcoma, pleomorphic",
+                    "Liposarcoma, NOS",
                     "Leiomyosarcoma",
                     "Synovial sarcoma",
-                    "MPNST",
+                    "Malignant peripheral nerve sheath tumor (MPNST)",
                     "Myxofibrosarcoma",
+                    "Fibrosarcoma",
+                    "Low-grade fibromyxoid sarcoma",
+                    "Sclerosing epithelioid fibrosarcoma",
+                    "Solitary fibrous tumor, malignant",
                     "Angiosarcoma",
+                    "Epithelioid hemangioendothelioma",
+                    "Intimal sarcoma",
                     "Epithelioid sarcoma",
-                    "Other",
+                    "Clear cell sarcoma",
+                    "Alveolar soft part sarcoma",
+                    "Desmoplastic small round cell tumor",
+                    "Extraskeletal osteosarcoma",
+                    "Extraskeletal chondrosarcoma",
+                    "Mesenchymal chondrosarcoma",
+                    "Rhabdomyosarcoma (embryonal)",
+                    "Rhabdomyosarcoma (alveolar)",
+                    "Rhabdomyosarcoma (pleomorphic)",
+                    "PEComa, malignant",
+                    "Inflammatory myofibroblastic tumor, malignant",
+                    "Malignant glomus tumor",
+                    "Malignant tenosynovial giant cell tumor",
+                    "Gastrointestinal stromal tumor (GIST)",
+                    "Dermatofibrosarcoma protuberans, fibrosarcomatous",
+                    "Other histologic type (specify)",
                     "See Comment"
                 ] },
                 { id: "grade", label: "FNCLCC Grade", type: "select", options: [
@@ -4798,12 +4836,28 @@
 
             fieldValues[field.id] = value;
 
-            if (value && protocol.name !== 'Pancreas (Exocrine)' && protocol.name !== 'Small Intestine') {
+            if (value && protocol.name !== 'Pancreas (Exocrine)' && protocol.name !== 'Small Intestine' && system !== 'Bone and Soft Tissue') {
                 lines.push(field.label + ': ' + value);
             }
         });
 
         if (system === 'Gastrointestinal' && protocol.name !== 'Pancreas (Exocrine)' && protocol.name !== 'Small Intestine') {
+            const addLine = (label, value) => {
+                if (value) lines.push(label + ': ' + value);
+            };
+            lines = [];
+            lines.push('CASE SUMMARY: ' + (fieldValues.caseSummary || '(' + protocol.name.toUpperCase() + ')'));
+            addLine('Standard(s)', fieldValues.standards || 'AJCC 8');
+            lines.push('========================================');
+            protocol.fields.forEach(field => {
+                if (field.id === 'protocolPostingDate' || field.id === 'caseSummary' || field.id === 'standards') return;
+                const value = fieldValues[field.id];
+                if (value) lines.push(field.label + ': ' + value);
+            });
+            lines.push('========================================');
+        }
+
+        if (system === 'Bone and Soft Tissue') {
             const addLine = (label, value) => {
                 if (value) lines.push(label + ': ' + value);
             };
