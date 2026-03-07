@@ -745,14 +745,20 @@ app.post("/api/rewrite", async (req, res) => {
       clientDateContext = null,
     } = req.body || {};
 
-    if (!text || typeof text !== "string") return res.status(400).send("Missing text");
+    const p = String(preset || "general").toLowerCase();
+    const normalizedText = typeof text === "string" ? text : "";
+    if (p !== "gross_photo" && !normalizedText.trim()) {
+      return res.status(400).send("Missing text");
+    }
 
     const userRules = String(rules || "").trim();
     const d = String(delimiter || "").trim();
 
     // If delimiter provided, treat as multi-chunk; else single text block
-    const chunks = d ? splitByDelimiter(text, d) : [text.trim()];
-    if (!chunks[0]) return res.status(400).send("Empty text after trimming.");
+    const chunks = d ? splitByDelimiter(normalizedText, d) : [normalizedText.trim()];
+    if (p !== "gross_photo" && !chunks[0]) {
+      return res.status(400).send("Empty text after trimming.");
+    }
 
     // =======================
     // DEFAULTS
@@ -955,7 +961,6 @@ Return only the final diagnosis line(s), preserving any user formatting.
 // ALL PRESETS = CHATGPT-STYLE OUTPUT
 // (Keeps your PRESETS so you can refine later.)
 // =======================
-const p = String(preset || "general").toLowerCase();
 const presetSystem = PRESETS[p] || PRESETS.general;
 const presetTemplate = (p === "micro" || p === "gross") ? String(template || "").trim() : "";
 const clientLearningExamples = ADAPTIVE_PRESETS.has(p) && Array.isArray(learningExamples)
