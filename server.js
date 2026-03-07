@@ -587,6 +587,39 @@ async function callOpenAIWithWebSearch({ apiKey, model, temperature, system, use
   return extractResponseOutputText(data);
 }
 
+async function callOpenAIMultimodal({ apiKey, model, temperature, system, userText, imageDataUrls = [] }) {
+  const userContent = [];
+  if (String(userText || "").trim()) {
+    userContent.push({ type: "input_text", text: String(userText || "").trim() });
+  }
+
+  for (const dataUrl of imageDataUrls) {
+    userContent.push({ type: "input_image", image_url: dataUrl });
+  }
+
+  const r = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: Number(temperature) || 0.2,
+      input: [
+        { role: "system", content: [{ type: "input_text", text: String(system || "").trim() }] },
+        { role: "user", content: userContent },
+      ],
+    }),
+  });
+
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`OpenAI multimodal error ${r.status}: ${raw}`);
+
+  const data = JSON.parse(raw);
+  return extractResponseOutputText(data);
+}
+
 function splitByDelimiter(raw, delimiter = "===CARD===") {
   const d = String(delimiter || "===CARD===");
   return String(raw || "")
@@ -707,6 +740,7 @@ app.post("/api/rewrite", async (req, res) => {
       rules = "",
       template = "",
       learningExamples = [],
+      imageDataUrls = [],
       delimiter = "", // optional; empty means "single block"
       clientDateContext = null,
     } = req.body || {};
@@ -860,6 +894,26 @@ OUTPUT:
 Return only the gross description text.
 `.trim(),
 
+      gross_photo: `
+You are an experienced pathology assistant writing a gross examination description from specimen photos.
+
+The user may provide one or two gross specimen images and optional text context.
+
+Your job:
+- Describe only what is directly visible in the image(s) using formal gross pathology style.
+- If optional context text is provided, incorporate it only when it does not conflict with the image(s).
+- Do not invent microscopic findings, final diagnosis, or unseen measurements.
+- If dimensions are not visible or provided, do not guess exact numbers.
+- If orientation, margins, or inking are unclear, explicitly state they are not clearly identifiable.
+- If two images are provided, synthesize one coherent gross description.
+
+Formatting:
+- Output polished gross description paragraph(s).
+- No bullets unless needed for an ink key.
+- No em dashes.
+- Return only the gross description text.
+`.trim(),
+
       path: `
 You are an experienced surgical pathologist writing FINAL DIAGNOSIS top line(s) for a pathology report.
 
@@ -1001,6 +1055,17 @@ ${LEARNING_CONTEXT}
 
 ${STYLE_SEED_CONTEXT}`.trim();
 
+const normalizedImageDataUrls = Array.isArray(imageDataUrls)
+  ? imageDataUrls
+      .map((url) => String(url || "").trim())
+      .filter((url) => /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(url))
+      .slice(0, 2)
+  : [];
+
+if (p === "gross_photo" && normalizedImageDataUrls.length === 0) {
+  return res.status(400).send("Gross (Photo) preset requires at least one image.");
+}
+
 // User content
 const user = chunks.join("\n\n");
 
@@ -1008,7 +1073,16 @@ const user = chunks.join("\n\n");
 const useWebSearch = shouldUseWebSearch({ preset: p, user });
 
 let finalOut;
-if (useWebSearch) {
+if (p === "gross_photo") {
+  finalOut = await callOpenAIMultimodal({
+    apiKey,
+    model,
+    temperature: Number(temperature) || 0.2,
+    system,
+    userText: user,
+    imageDataUrls: normalizedImageDataUrls,
+  });
+} else if (useWebSearch) {
   try {
     finalOut = await callOpenAIWithWebSearch({
       apiKey,

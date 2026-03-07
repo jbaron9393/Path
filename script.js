@@ -379,6 +379,16 @@ document.addEventListener("DOMContentLoaded", () => {
       "dark:border-rose-500",
       "shadow-sm",
     ],
+    gross_photo: [
+      "bg-pink-600",
+      "text-white",
+      "border",
+      "border-pink-600",
+      "dark:bg-pink-500",
+      "dark:text-white",
+      "dark:border-pink-500",
+      "shadow-sm",
+    ],
     path: [
       "bg-purple-600",
       "text-white",
@@ -408,6 +418,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwTemplateLabel = document.getElementById("rwTemplateLabel");
   const rwTemplate = document.getElementById("rwTemplate");
   const rwKeepRules = document.getElementById("rwKeepRules");
+  const rwPhotoUploadWrap = document.getElementById("rwPhotoUploadWrap");
+  const rwPhotoInput = document.getElementById("rwPhotoInput");
+  const rwPhotoList = document.getElementById("rwPhotoList");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
   const rwCorrected = document.getElementById("rwCorrected");
@@ -432,8 +445,66 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    let rwGrossPhotoDataUrls = [];
+
+    function renderGrossPhotoList() {
+      if (!rwPhotoList) return;
+      if (!rwGrossPhotoDataUrls.length) {
+        rwPhotoList.textContent = "No images selected.";
+        return;
+      }
+      rwPhotoList.textContent = `${rwGrossPhotoDataUrls.length} image(s) attached for gross photo mode.`;
+    }
+
+    function setGrossPhotoVisibility(preset) {
+      if (!rwPhotoUploadWrap) return;
+      rwPhotoUploadWrap.classList.toggle("hidden", preset !== "gross_photo");
+    }
+
+    async function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read image file."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if (rwPhotoInput) {
+      rwPhotoInput.addEventListener("change", async () => {
+        const files = Array.from(rwPhotoInput.files || []);
+        if (!files.length) {
+          rwGrossPhotoDataUrls = [];
+          renderGrossPhotoList();
+          return;
+        }
+
+        if (files.length > 2) {
+          setStatus("Please select up to 2 images for gross photo mode.");
+          rwPhotoInput.value = "";
+          rwGrossPhotoDataUrls = [];
+          renderGrossPhotoList();
+          return;
+        }
+
+        try {
+          rwGrossPhotoDataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
+          renderGrossPhotoList();
+          setStatus(`Attached ${rwGrossPhotoDataUrls.length} image(s) for gross photo mode.`);
+        } catch (err) {
+          console.error("Image upload error:", err);
+          rwGrossPhotoDataUrls = [];
+          rwPhotoInput.value = "";
+          renderGrossPhotoList();
+          setStatus("Could not read selected image(s). Please try again.");
+        }
+      });
+    }
+
     function setPlaceholdersForPreset(_preset) {
-      rwInput.placeholder = "Ask anything or paste text here";
+      rwInput.placeholder = _preset === "gross_photo"
+        ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
+        : "Ask anything or paste text here";
       rwRules.placeholder =
         "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
       if (rwTemplate) {
@@ -512,7 +583,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setRunButtonLabel(preset) {
-      rwRun.textContent = preset === "general" ? "Send ➜" : "Refine ✨";
+      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : "Refine ✨";
     }
 
     function normalizeOutputText(text) {
@@ -644,6 +715,9 @@ document.addEventListener("DOMContentLoaded", () => {
       rwCorrected.disabled = true;
       if (clearRules) rwRules.value = "";
       if (rwTemplate && rwPreset !== "micro" && rwPreset !== "gross") rwTemplate.value = "";
+      rwGrossPhotoDataUrls = [];
+      if (rwPhotoInput) rwPhotoInput.value = "";
+      renderGrossPhotoList();
     }
 
     // Enter = submit, Shift + Enter = newline (rwInput)
@@ -780,6 +854,7 @@ document.addEventListener("DOMContentLoaded", () => {
         applyRulesForPreset(rwPreset);
         setPlaceholdersForPreset(rwPreset);
         syncTemplateVisibility(rwPreset);
+        setGrossPhotoVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
         updateCorrectedButtonState();
 
@@ -800,7 +875,8 @@ document.addEventListener("DOMContentLoaded", () => {
     rwRun.addEventListener("click", async (e) => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
-      if (!text) return setStatus("Type a question or paste text first.");
+      const hasGrossPhotos = rwPreset === "gross_photo" && rwGrossPhotoDataUrls.length > 0;
+      if (!text && !hasGrossPhotos) return setStatus("Type text or attach gross photo image(s) first.");
 
       const previousAnswer = getRwOutputRaw();
       const isGeneralFollowUp = rwPreset === "general" && previousAnswer.length > 0;
@@ -826,6 +902,7 @@ document.addEventListener("DOMContentLoaded", () => {
           preset: rwPreset,
           rules: rwRules.value || "",
           template: rwPreset === "micro" || rwPreset === "gross" ? rwTemplate?.value || "" : "",
+          imageDataUrls: rwPreset === "gross_photo" ? rwGrossPhotoDataUrls : [],
           learningExamples: getLearningExamples(rwPreset),
           clientDateContext: getClientDateContext(),
         });
@@ -834,7 +911,7 @@ document.addEventListener("DOMContentLoaded", () => {
         rwOutput.dataset.raw = renderedOutput.normalized;
         rwCopy.disabled = !renderedOutput.normalized;
         updateCorrectedButtonState();
-        setStatus(rwPreset === "general" ? "Done — answered." : "Done — rewritten.");
+        setStatus(rwPreset === "general" ? "Done — answered." : rwPreset === "gross_photo" ? "Done — generated gross description from photo(s)." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
         setStatus("Rewriter error: " + (err?.message || String(err)));
@@ -849,7 +926,9 @@ document.addEventListener("DOMContentLoaded", () => {
     applyRulesForPreset("general");
     setPlaceholdersForPreset("general");
     syncTemplateVisibility("general");
+    setGrossPhotoVisibility("general");
     setRunButtonLabel("general");
+    renderGrossPhotoList();
     updateCorrectedButtonState();
 
     // Keep session warm so long-idle tabs still respond quickly.
