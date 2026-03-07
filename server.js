@@ -908,10 +908,12 @@ The user may provide one or two gross specimen images and optional text context.
 Your job:
 - Describe only what is directly visible in the image(s) using formal gross pathology style.
 - If optional context text is provided, incorporate it only when it does not conflict with the image(s).
+- If any text, handwriting, labels, cassette IDs, measurements, ruler markings, or numeric sequences are visible in the photo, explicitly describe them in the gross description.
+- Transcribe clearly legible text or numbers exactly as shown (including units/symbols when visible); if partially legible, state that portions are illegible.
 - Do not invent microscopic findings, final diagnosis, or unseen measurements.
 - If dimensions are not visible or provided, do not guess exact numbers.
 - If orientation, margins, or inking are unclear, explicitly state they are not clearly identifiable.
-- If two images are provided, synthesize one coherent gross description.
+- If two images are provided, synthesize one coherent gross description and include text/number findings from both images.
 
 Formatting:
 - Output polished gross description paragraph(s).
