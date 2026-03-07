@@ -470,6 +470,34 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    async function attachGrossPhotos(files, { replaceExisting = false } = {}) {
+      const validFiles = Array.from(files || []).filter((file) => String(file?.type || "").startsWith("image/"));
+      if (!validFiles.length) return;
+
+      const roomLeft = Math.max(0, 2 - (replaceExisting ? 0 : rwGrossPhotoDataUrls.length));
+      if (roomLeft <= 0) {
+        setStatus("Already attached 2 images. Clear or switch preset to add different photos.");
+        return;
+      }
+
+      const filesToUse = validFiles.slice(0, roomLeft);
+      if (validFiles.length > roomLeft) {
+        setStatus("Only up to 2 images are allowed. Extra image(s) were ignored.");
+      }
+
+      try {
+        const incoming = await Promise.all(filesToUse.map((file) => fileToDataUrl(file)));
+        rwGrossPhotoDataUrls = replaceExisting ? incoming : [...rwGrossPhotoDataUrls, ...incoming].slice(0, 2);
+        renderGrossPhotoList();
+        setStatus(`Attached ${rwGrossPhotoDataUrls.length} image(s) for gross photo mode.`);
+      } catch (err) {
+        console.error("Image upload error:", err);
+        if (replaceExisting) rwGrossPhotoDataUrls = [];
+        renderGrossPhotoList();
+        setStatus("Could not read selected image(s). Please try again.");
+      }
+    }
+
     if (rwPhotoInput) {
       rwPhotoInput.addEventListener("change", async () => {
         const files = Array.from(rwPhotoInput.files || []);
@@ -482,22 +510,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (files.length > 2) {
           setStatus("Please select up to 2 images for gross photo mode.");
           rwPhotoInput.value = "";
-          rwGrossPhotoDataUrls = [];
-          renderGrossPhotoList();
-          return;
         }
 
-        try {
-          rwGrossPhotoDataUrls = await Promise.all(files.map((file) => fileToDataUrl(file)));
-          renderGrossPhotoList();
-          setStatus(`Attached ${rwGrossPhotoDataUrls.length} image(s) for gross photo mode.`);
-        } catch (err) {
-          console.error("Image upload error:", err);
-          rwGrossPhotoDataUrls = [];
-          rwPhotoInput.value = "";
-          renderGrossPhotoList();
-          setStatus("Could not read selected image(s). Please try again.");
-        }
+        await attachGrossPhotos(files, { replaceExisting: true });
       });
     }
 
@@ -737,6 +752,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
       e.preventDefault();
       rwRun.click();
+    });
+
+    rwInput.addEventListener("paste", async (e) => {
+      if (rwPreset !== "gross_photo") return;
+
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items
+        .filter((item) => item.kind === "file" && String(item.type || "").startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+
+      if (!imageFiles.length) return;
+
+      e.preventDefault();
+      await attachGrossPhotos(imageFiles, { replaceExisting: false });
     });
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwRules)
