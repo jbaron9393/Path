@@ -349,6 +349,16 @@ document.addEventListener("DOMContentLoaded", () => {
       "dark:border-slate-100",
       "shadow-sm",
     ],
+    hpi: [
+      "bg-amber-600",
+      "text-white",
+      "border",
+      "border-amber-600",
+      "dark:bg-amber-500",
+      "dark:text-white",
+      "dark:border-amber-500",
+      "shadow-sm",
+    ],
     email: [
       "bg-primary-600",
       "text-white",
@@ -519,7 +529,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function setPlaceholdersForPreset(_preset) {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
-        : "Ask anything or paste text here";
+        : _preset === "hpi"
+          ? "Paste timeline details (diagnosis, imaging, prior pathology, treatment history, surgeries)…"
+          : "Ask anything or paste text here";
       rwRules.placeholder =
         "Optional: add constraints (tone, bullets, length, style). Leave empty for default behavior.";
       if (rwTemplate) {
@@ -598,7 +610,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setRunButtonLabel(preset) {
-      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : "Refine ✨";
+      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : "Refine ✨";
     }
 
     function normalizeOutputText(text) {
@@ -915,7 +927,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : text;
 
       rwRun.disabled = true;
-      rwRun.textContent = rwPreset === "general" ? "Sending…" : "Refining…";
+      rwRun.textContent = rwPreset === "general" ? "Sending…" : rwPreset === "hpi" ? "Generating HPI…" : "Refining…";
       setStatus(
         rwPreset === "general"
           ? isGeneralFollowUp
@@ -941,7 +953,7 @@ document.addEventListener("DOMContentLoaded", () => {
         rwOutput.dataset.raw = renderedOutput.normalized;
         rwCopy.disabled = !renderedOutput.normalized;
         updateCorrectedButtonState();
-        setStatus(rwPreset === "general" ? "Done — answered." : rwPreset === "gross_photo" ? "Done — generated gross description from photo(s)." : "Done — rewritten.");
+        setStatus(rwPreset === "general" ? "Done — answered." : rwPreset === "gross_photo" ? "Done — generated gross description from photo(s)." : rwPreset === "hpi" ? "Done — generated HPI paragraph." : "Done — rewritten.");
       } catch (err) {
         console.error("Rewriter error:", err);
         setStatus("Rewriter error: " + (err?.message || String(err)));
