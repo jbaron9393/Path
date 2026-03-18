@@ -805,6 +805,8 @@ Rules:
 - Do not invent missing data or over-interpret findings.
 - If chronology is incomplete, use neutral transitions and avoid guessing.
 - Use professional medical language suitable for a chart HPI.
+- Standard clinical abbreviations are allowed when they improve concision (e.g., hx, s/p, chemoRT, mets, bx, MRI/CT).
+- Avoid run-on sentences; use clear sentence boundaries and tight syntax.
 - No em dashes.
 `.trim(),
 
