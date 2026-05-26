@@ -447,6 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwFrozensTools = document.getElementById("rwFrozensTools");
   const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
+  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
   const hpiVeryConcise = document.getElementById("hpiVeryConcise");
@@ -550,6 +551,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       return out.join("\n");
+    }
+    function parseFrozensRows(raw) {
+      return convertFrozensText(raw)
+        .split("\n")
+        .filter(Boolean)
+        .map((row) => {
+          const [time = "", surgeon = "", procedure = "", mrn = "", patient = ""] = row.split("\t");
+          const orRoom = (raw.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
+          return { time, orRoom, surgeon, procedure, mrn, patient };
+        });
     }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
@@ -700,7 +711,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setRunButtonLabel(preset) {
-      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : preset === "hpi_conciser" ? "Concise HPI" : "Refine ✨";
+      rwRun.textContent = preset === "frozens_helper" ? "Convert to Excel Row" : preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : preset === "hpi_conciser" ? "Concise HPI" : "Refine ✨";
     }
 
     function normalizeOutputText(text) {
@@ -1042,13 +1053,33 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
         const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
-        if (!combined.trim()) return setStatus("Paste text or upload/paste an image first.");
-        const finalRows = convertFrozensText(combined);
-        rwOutput.textContent = finalRows;
-        rwOutput.dataset.raw = finalRows;
-        rwCopy.disabled = !finalRows;
+        const historyText = String(rwFrozensHistory?.value || "").trim();
+        if (!combined.trim()) return setStatus("Paste OR text or upload/paste an OR schedule screenshot first.");
+        const parsedRows = parseFrozensRows(combined);
+        if (!parsedRows.length) return setStatus("Could not parse schedule row.");
+        let briefHistory = "";
+        if (historyText) {
+          const j = await apiPostJson("/api/rewrite", {
+            text: historyText,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: 0.1,
+            preset: "hpi",
+            rules: "Return plain text only. 1-2 concise sentences for BRIEF HISTORY, preserving age/sex, diagnosis, site/laterality, key path/imaging, treatment status. Use abbreviations.",
+            template: "",
+            imageDataUrls: [],
+            learningExamples: [],
+            clientDateContext: getClientDateContext(),
+          });
+          briefHistory = normalizeOutputText(j.text || "");
+        }
+        const excelRows = parsedRows.map((r) =>
+          ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
+        ).join("\n");
+        rwOutput.textContent = excelRows;
+        rwOutput.dataset.raw = excelRows;
+        rwCopy.disabled = !excelRows;
         updateCorrectedButtonState();
-        setStatus("Done — converted to tab-delimited Frozens Helper rows.");
+        setStatus("Done — generated Excel-ready row(s): GENERAL, TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT, BRIEF HISTORY, PRIOR PATH.");
         return;
       }
       if (rwPreset === "hpi_conciser") {
