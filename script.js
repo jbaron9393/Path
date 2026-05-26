@@ -553,30 +553,30 @@ document.addEventListener("DOMContentLoaded", () => {
       return out.join("\n");
     }
     function parseFrozensRows(raw) {
-      const text = String(raw || "").replace(/\r/g, "\n");
-      const compact = text.replace(/\s+/g, " ").trim();
+      const compact = String(raw || "").replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+      if (!compact) return [];
       const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
-      const orRoom =
-        (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1]
-        || (compact.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
-      const mrn = (compact.match(/\b(\d{6,10})\b/) || ["", ""])[1];
-      const surgeonRaw = (compact.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)(?:\s+\b(?:MD|DO)\b)?/) || []);
-      const surgeon = surgeonRaw.length ? `${surgeonRaw[1]}, ${surgeonRaw[2]} ${surgeonRaw[3]}`.trim() : "";
+      const orRoom = (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1];
+      const mrnMatch = compact.match(/\b(\d{6,10})\b/);
+      const mrn = mrnMatch?.[1] || "";
 
-      const patientMatch = compact.match(/\b([A-Z][a-z]+,\s*[A-Z][a-z]+)(?:\s+([A-Z][a-z]+))?/);
-      const patient = patientMatch ? [patientMatch[1], patientMatch[2] || ""].join(" ").trim() : "";
+      const beforeMrn = mrn ? compact.slice(0, mrnMatch.index).trim() : compact;
+      const afterMrn = mrn ? compact.slice((mrnMatch.index || 0) + mrn.length).trim() : "";
 
-      let procedure = compact;
-      [time, orRoom, mrn, surgeonRaw[0] || "", patientMatch?.[0] || ""].forEach((chunk) => {
-        if (chunk) procedure = procedure.replace(chunk, " ");
-      });
-      procedure = cleanProcedure(procedure)
-        .replace(/\bDeep To Fascia,\s*/i, "")
+      const patientNameMatch = afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const patient = cleanPatient(patientNameMatch?.[1] || "");
+
+      const pre = beforeMrn
+        .replace(new RegExp(`\\b${time.replace(":", "[:.]?")}\\b`), " ")
+        .replace(orRoom, " ")
         .replace(/\s+/g, " ")
         .trim();
-      if (/Excision/i.test(procedure) && !/^Excision/i.test(procedure)) {
-        procedure = `Excision ${procedure.replace(/.*\bExcision\b/i, "").trim()}`;
-      }
+      const surgeonMatch = pre.match(/([A-Z][a-z]+(?:,\s*|\s+)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const surgeon = normalizeName(surgeonMatch?.[1] || "");
+
+      let procedure = pre;
+      if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
+      procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
       return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
@@ -1070,7 +1070,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
         const combined = rwFrozensImageText;
-        const historyText = String(rwFrozensHistory?.value || "").trim();
+        const historyText = String(text || rwFrozensHistory?.value || "").trim();
         if (!combined.trim()) return setStatus("Paste an OR schedule screenshot first.");
         const parsedRows = parseFrozensRows(combined);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
