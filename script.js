@@ -522,11 +522,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
         .replace(/\b\d+\.\s*/g, "")
+        .replace(/\b\d+\)\s*/g, "")
         .replace(/\bNeurolysis:\s*/gi, "neurolysis ")
+        .replace(/\b3\.\s.*$/i, "")
+        .replace(/\bComplex Closure\b.*$/i, "")
+        .replace(/\bIntra-?Op\b.*$/i, "")
         .replace(/\bExcision,\s*Soft Tissue Mass,\s*Deep To Fascia,\s*(Left|Right)\s+([A-Za-z ]+)/gi, "Excision $1 $2 soft tissue mass")
         .replace(/\bExcision,\s*Subcutaneous\s*(Left|Right)\s+([A-Za-z ]+?)\s+Cyst,\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\bExcision\s+Subcutaneous\s+(Left|Right)\s+([A-Za-z ]+?)\s+Cyst\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\bRadical Resection\s+(Left|Right)\s+([A-Za-z ]+?)\s+Soft Tissue Sarcoma,\s*neurolysis\s*:?/gi, "Radical resection $1 $2 soft tissue sarcoma with neurolysis ")
+        .replace(/\b(Thyroidectomy),\s*Total\s*Or\s*Subtotal\s*,\s*(Dissection,\s*Neck)\b/gi, "$1, Total or Subtotal, $2")
         .replace(/\s*,\s*/g, " ")
         .replace(/\s+/g, " ")
+        .replace(/\s+\.\s*$/g, "")
         .replace(/\b(\d+\.)/g, "")
         .trim()
         .replace(/^./, (c) => c.toUpperCase());
@@ -553,14 +561,53 @@ document.addEventListener("DOMContentLoaded", () => {
       return out.join("\n");
     }
     function parseFrozensRows(raw) {
-      return convertFrozensText(raw)
-        .split("\n")
-        .filter(Boolean)
-        .map((row) => {
-          const [time = "", surgeon = "", procedure = "", mrn = "", patient = ""] = row.split("\t");
-          const orRoom = (raw.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
-          return { time, orRoom, surgeon, procedure, mrn, patient };
-        });
+      const compact = String(raw || "")
+        .replace(/\|/g, " ")
+        .replace(/\r?\n/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!compact) return [];
+      const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
+      const orRoom = (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1];
+      const mrnMatch = compact.match(/\b(\d{6,10})\b/);
+      const mrn = mrnMatch?.[1] || "";
+
+      const beforeMrn = mrn ? compact.slice(0, mrnMatch.index).trim() : compact;
+      const afterMrn = mrn ? compact.slice((mrnMatch.index || 0) + mrn.length).trim() : "";
+
+      const pre = beforeMrn
+        .replace(new RegExp(`\\b${time.replace(":", "[:.]?")}\\b`), " ")
+        .replace(orRoom, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const patientNameMatch = pre.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const patient = cleanPatient(patientNameMatch?.[1] || "");
+
+      const surgeonMatch =
+        afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/)
+        || afterMrn.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/);
+      const surgeon = normalizeName(surgeonMatch?.[1] || "");
+      const surgeonClean = surgeon
+        .replace(/\b(Male|Female)\s+\d{1,3}\s+years?\b/gi, "")
+        .replace(/\bJr\b\.?/gi, "Jr")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      let procedure = afterMrn;
+      if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
+      if (!surgeon) {
+        const embeddedSurgeon =
+          procedure.match(/\b([A-Z][a-z]+),\s*([A-Z][a-z]+)\s+([A-Z][a-z]+),?\s*(?:Md|MD|Do|DO)\b/)
+          || procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+(?:Md|MD|Do|DO)\b/);
+        if (embeddedSurgeon) {
+          const inferred = `${embeddedSurgeon[1]}, ${embeddedSurgeon[2]} ${embeddedSurgeon[3]}`;
+          procedure = procedure.replace(embeddedSurgeon[0], " ");
+          const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
+          return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
+        }
+      }
+      procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
+      return [{ time, orRoom, surgeon: surgeonClean, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
@@ -627,7 +674,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
-          ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
+          ? "Paste patient HPI/history here. OR schedule screenshot OCR text is added automatically when you paste a screenshot."
         : _preset === "hpi_conciser"
           ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
@@ -792,7 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const fromDataset = rwOutput?.dataset?.raw || "";
       if (fromDataset) return fromDataset;
 
-      const fromRenderedText = String(rwOutput?.innerText || "")
+      const fromRenderedText = String(rwOutput?.value || "")
         .replace(/\u00A0/g, " ")
         .replace(/\r\n/g, "\n")
         .replace(/\n{3,}/g, "\n\n")
@@ -810,7 +857,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function getRwOutputPlainText() {
-      const normalized = String(rwOutput?.innerText || "")
+      const normalized = String(rwOutput?.value || "")
         .replace(/\u00A0/g, " ")
         .replace(/\r\n/g, "\n")
         .replace(/\n{3,}/g, "\n\n")
@@ -837,7 +884,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function clearRewriterFields({ clearRules } = { clearRules: true }) {
       rwInput.value = "";
-      rwOutput.innerHTML = "";
+      rwOutput.value = "";
       rwOutput.dataset.raw = "";
       rwCopy.disabled = true;
       rwCorrected.disabled = true;
@@ -1052,9 +1099,9 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
-        const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
-        const historyText = String(rwFrozensHistory?.value || "").trim();
-        if (!combined.trim()) return setStatus("Paste OR text or upload/paste an OR schedule screenshot first.");
+        const combined = rwFrozensImageText;
+        const historyText = String(text || rwFrozensHistory?.value || "").trim();
+        if (!combined.trim()) return setStatus("Paste an OR schedule screenshot first.");
         const parsedRows = parseFrozensRows(combined);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         let briefHistory = "";
@@ -1064,18 +1111,18 @@ document.addEventListener("DOMContentLoaded", () => {
             model: modelEl?.value || "gpt-4.1-mini",
             temperature: 0.1,
             preset: "hpi",
-            rules: "Return plain text only. 1-2 concise sentences for BRIEF HISTORY, preserving age/sex, diagnosis, site/laterality, key path/imaging, treatment status. Use abbreviations.",
+            rules: "Return plain text only, max 2 sentences and hard max 200 characters total including spaces. Preserve only essential age/sex + dx/site/status. Use abbreviations.",
             template: "",
             imageDataUrls: [],
             learningExamples: [],
             clientDateContext: getClientDateContext(),
           });
-          briefHistory = normalizeOutputText(j.text || "");
+          briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
         }
         const excelRows = parsedRows.map((r) =>
-          ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
+          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
         ).join("\n");
-        rwOutput.textContent = excelRows;
+        rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
         rwCopy.disabled = !excelRows;
         updateCorrectedButtonState();
@@ -1108,7 +1155,7 @@ document.addEventListener("DOMContentLoaded", () => {
             clientDateContext: getClientDateContext(),
           });
           const conciseText = normalizeOutputText(j.text ?? "");
-          rwOutput.textContent = conciseText;
+          rwOutput.value = conciseText;
           rwOutput.dataset.raw = conciseText;
           rwCopy.disabled = !conciseText;
           setStatus("Done — concise HPI generated.");
@@ -1150,7 +1197,7 @@ document.addEventListener("DOMContentLoaded", () => {
           clientDateContext: getClientDateContext(),
         });
         const renderedOutput = renderOutputRichText(j.text ?? "");
-        rwOutput.innerHTML = renderedOutput.html;
+        rwOutput.value = renderedOutput.normalized;
         rwOutput.dataset.raw = renderedOutput.normalized;
         rwCopy.disabled = !renderedOutput.normalized;
         updateCorrectedButtonState();
