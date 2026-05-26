@@ -1118,7 +1118,7 @@ document.addEventListener("DOMContentLoaded", () => {
           briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
         }
         const excelRows = parsedRows.map((r) =>
-          [r.time, r.orRoom, r.procedure, r.surgeon, r.mrn, r.patient, briefHistory, "none"].join("\t")
+          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
         ).join("\n");
         rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
