@@ -596,7 +596,9 @@ document.addEventListener("DOMContentLoaded", () => {
       let procedure = afterMrn;
       if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
       if (!surgeon) {
-        const embeddedSurgeon = procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+(?:Md|MD|Do|DO)\b/);
+        const embeddedSurgeon =
+          procedure.match(/\b([A-Z][a-z]+),\s*([A-Z][a-z]+)\s+([A-Z][a-z]+),?\s*(?:Md|MD|Do|DO)\b/)
+          || procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+(?:Md|MD|Do|DO)\b/);
         if (embeddedSurgeon) {
           const inferred = `${embeddedSurgeon[1]}, ${embeddedSurgeon[2]} ${embeddedSurgeon[3]}`;
           procedure = procedure.replace(embeddedSurgeon[0], " ");
