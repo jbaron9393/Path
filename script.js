@@ -419,6 +419,9 @@ document.addEventListener("DOMContentLoaded", () => {
       "dark:border-indigo-500",
       "shadow-sm",
     ],
+    hpi_conciser: [
+      "bg-cyan-600","text-white","border","border-cyan-600","dark:bg-cyan-500","dark:text-white","dark:border-cyan-500","shadow-sm",
+    ],
   };
 
   const INACTIVE_COLORS = [
@@ -445,6 +448,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
+  const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
+  const hpiVeryConcise = document.getElementById("hpiVeryConcise");
+  const hpiIncludeProcedure = document.getElementById("hpiIncludeProcedure");
+  const hpiIncludeDates = document.getElementById("hpiIncludeDates");
+  const hpiAggressiveAbbrev = document.getElementById("hpiAggressiveAbbrev");
+  const hpiMaxSentences = document.getElementById("hpiMaxSentences");
+  const hpiExtraInstruction = document.getElementById("hpiExtraInstruction");
   const rwCopy = document.getElementById("rwCopy");
   const rwCorrected = document.getElementById("rwCorrected");
 
@@ -487,6 +497,10 @@ document.addEventListener("DOMContentLoaded", () => {
     function setFrozensVisibility(preset) {
       if (!rwFrozensTools) return;
       rwFrozensTools.classList.toggle("hidden", preset !== "frozens_helper");
+    }
+    function setHpiConciserVisibility(preset) {
+      if (!rwHpiConciserTools) return;
+      rwHpiConciserTools.classList.toggle("hidden", preset !== "hpi_conciser");
     }
     function normalizeName(name) {
       return String(name || "")
@@ -603,6 +617,8 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
           ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
+        : _preset === "hpi_conciser"
+          ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
           ? "Paste timeline details (diagnosis, imaging, prior pathology, treatment history, surgeries)…"
           : "Ask anything or paste text here";
@@ -684,7 +700,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setRunButtonLabel(preset) {
-      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : "Refine ✨";
+      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : preset === "hpi_conciser" ? "Concise HPI" : "Refine ✨";
     }
 
     function normalizeOutputText(text) {
@@ -1003,6 +1019,7 @@ document.addEventListener("DOMContentLoaded", () => {
         syncTemplateVisibility(rwPreset);
         setGrossPhotoVisibility(rwPreset);
         setFrozensVisibility(rwPreset);
+        setHpiConciserVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
         updateCorrectedButtonState();
 
@@ -1032,6 +1049,42 @@ document.addEventListener("DOMContentLoaded", () => {
         rwCopy.disabled = !finalRows;
         updateCorrectedButtonState();
         setStatus("Done — converted to tab-delimited Frozens Helper rows.");
+        return;
+      }
+      if (rwPreset === "hpi_conciser") {
+        if (!text) return setStatus("Paste HPI text first.");
+        const sentenceCap = hpiVeryConcise?.checked ? 1 : Number(hpiMaxSentences?.value || 2);
+        const optRules = [
+          "Rewrite into concise medical history for case-tracking spreadsheet.",
+          `Return plain text only, ${sentenceCap} sentence(s) maximum.`,
+          "Preserve key facts: age/sex, primary dx or mass, site/laterality, key imaging/biopsy findings, mets status if relevant, and current treatment/status.",
+          (hpiIncludeProcedure?.checked ? "Include key procedure/surgery details when clinically relevant." : "Exclude scheduling/procedure-plan language (planned surgery/resection/scheduled)."),
+          (hpiIncludeDates?.checked ? "Include only clinically meaningful dates." : "Omit dates unless required for clinical clarity."),
+          (hpiAggressiveAbbrev?.checked ? "Use aggressive medical abbreviations (M/F, LN, LAD, FNA, bx, MRI, CT, ERCP, s/p, c/f, DDLPS, PTC, RT, chemo)." : "Use standard concise medical abbreviations appropriately."),
+          "Avoid narrative filler, repeated dates, symptom lists unless critical, and long paragraphs.",
+          String(hpiExtraInstruction?.value || "").trim(),
+        ].filter(Boolean).join("\n");
+        try {
+          const j = await apiPostJson("/api/rewrite", {
+            text,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: 0.1,
+            preset: "hpi",
+            rules: optRules,
+            template: "",
+            imageDataUrls: [],
+            learningExamples: [],
+            clientDateContext: getClientDateContext(),
+          });
+          const conciseText = normalizeOutputText(j.text ?? "");
+          rwOutput.textContent = conciseText;
+          rwOutput.dataset.raw = conciseText;
+          rwCopy.disabled = !conciseText;
+          setStatus("Done — concise HPI generated.");
+        } catch (err) {
+          console.error("HPI conciser error:", err);
+          setStatus("HPI conciser error: " + (err?.message || String(err)));
+        }
         return;
       }
       const hasGrossPhotos = rwPreset === "gross_photo" && rwGrossPhotoDataUrls.length > 0;
@@ -1087,6 +1140,7 @@ document.addEventListener("DOMContentLoaded", () => {
     syncTemplateVisibility("general");
     setGrossPhotoVisibility("general");
     setFrozensVisibility("general");
+    setHpiConciserVisibility("general");
     setRunButtonLabel("general");
     renderGrossPhotoList();
     updateCorrectedButtonState();
