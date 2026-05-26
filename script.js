@@ -553,14 +553,31 @@ document.addEventListener("DOMContentLoaded", () => {
       return out.join("\n");
     }
     function parseFrozensRows(raw) {
-      return convertFrozensText(raw)
-        .split("\n")
-        .filter(Boolean)
-        .map((row) => {
-          const [time = "", surgeon = "", procedure = "", mrn = "", patient = ""] = row.split("\t");
-          const orRoom = (raw.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
-          return { time, orRoom, surgeon, procedure, mrn, patient };
-        });
+      const text = String(raw || "").replace(/\r/g, "\n");
+      const compact = text.replace(/\s+/g, " ").trim();
+      const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
+      const orRoom =
+        (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1]
+        || (compact.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
+      const mrn = (compact.match(/\b(\d{6,10})\b/) || ["", ""])[1];
+      const surgeonRaw = (compact.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)(?:\s+\b(?:MD|DO)\b)?/) || []);
+      const surgeon = surgeonRaw.length ? `${surgeonRaw[1]}, ${surgeonRaw[2]} ${surgeonRaw[3]}`.trim() : "";
+
+      const patientMatch = compact.match(/\b([A-Z][a-z]+,\s*[A-Z][a-z]+)(?:\s+([A-Z][a-z]+))?/);
+      const patient = patientMatch ? [patientMatch[1], patientMatch[2] || ""].join(" ").trim() : "";
+
+      let procedure = compact;
+      [time, orRoom, mrn, surgeonRaw[0] || "", patientMatch?.[0] || ""].forEach((chunk) => {
+        if (chunk) procedure = procedure.replace(chunk, " ");
+      });
+      procedure = cleanProcedure(procedure)
+        .replace(/\bDeep To Fascia,\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (/Excision/i.test(procedure) && !/^Excision/i.test(procedure)) {
+        procedure = `Excision ${procedure.replace(/.*\bExcision\b/i, "").trim()}`;
+      }
+      return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
@@ -1073,7 +1090,7 @@ document.addEventListener("DOMContentLoaded", () => {
           briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
         }
         const excelRows = parsedRows.map((r) =>
-          ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
+          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
         ).join("\n");
         rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
