@@ -553,7 +553,11 @@ document.addEventListener("DOMContentLoaded", () => {
       return out.join("\n");
     }
     function parseFrozensRows(raw) {
-      const compact = String(raw || "").replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+      const compact = String(raw || "")
+        .replace(/\|/g, " ")
+        .replace(/\r?\n/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       if (!compact) return [];
       const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
       const orRoom = (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1];
@@ -571,7 +575,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const patientNameMatch = pre.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
       const patient = cleanPatient(patientNameMatch?.[1] || "");
 
-      const surgeonMatch = afterMrn.match(/([A-Z][a-z]+(?:,\s*|\s+)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const surgeonMatch =
+        afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/)
+        || afterMrn.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/);
       const surgeon = normalizeName(surgeonMatch?.[1] || "");
 
       let procedure = afterMrn;
