@@ -529,6 +529,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\bIntra-?Op\b.*$/i, "")
         .replace(/\bExcision,\s*Soft Tissue Mass,\s*Deep To Fascia,\s*(Left|Right)\s+([A-Za-z ]+)/gi, "Excision $1 $2 soft tissue mass")
         .replace(/\bExcision,\s*Subcutaneous\s*(Left|Right)\s+([A-Za-z ]+?)\s+Cyst,\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\bExcision\s+Subcutaneous\s+(Left|Right)\s+([A-Za-z ]+?)\s+Cyst\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
         .replace(/\bRadical Resection\s+(Left|Right)\s+([A-Za-z ]+?)\s+Soft Tissue Sarcoma,\s*neurolysis\s*:?/gi, "Radical resection $1 $2 soft tissue sarcoma with neurolysis ")
         .replace(/\b(Thyroidectomy),\s*Total\s*Or\s*Subtotal\s*,\s*(Dissection,\s*Neck)\b/gi, "$1, Total or Subtotal, $2")
         .replace(/\s*,\s*/g, " ")
@@ -594,6 +595,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let procedure = afterMrn;
       if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
+      if (!surgeon) {
+        const embeddedSurgeon = procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+(?:Md|MD|Do|DO)\b/);
+        if (embeddedSurgeon) {
+          const inferred = `${embeddedSurgeon[1]}, ${embeddedSurgeon[2]} ${embeddedSurgeon[3]}`;
+          procedure = procedure.replace(embeddedSurgeon[0], " ");
+          const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
+          return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
+        }
+      }
       procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
       return [{ time, orRoom, surgeon: surgeonClean, procedure, mrn, patient }];
     }
@@ -1108,7 +1118,7 @@ document.addEventListener("DOMContentLoaded", () => {
           briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
         }
         const excelRows = parsedRows.map((r) =>
-          ["1", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
+          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
         ).join("\n");
         rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
