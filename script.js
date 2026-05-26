@@ -409,6 +409,19 @@ document.addEventListener("DOMContentLoaded", () => {
       "dark:border-purple-500",
       "shadow-sm",
     ],
+    frozens_helper: [
+      "bg-indigo-600",
+      "text-white",
+      "border",
+      "border-indigo-600",
+      "dark:bg-indigo-500",
+      "dark:text-white",
+      "dark:border-indigo-500",
+      "shadow-sm",
+    ],
+    hpi_conciser: [
+      "bg-cyan-600","text-white","border","border-cyan-600","dark:bg-cyan-500","dark:text-white","dark:border-cyan-500","shadow-sm",
+    ],
   };
 
   const INACTIVE_COLORS = [
@@ -431,7 +444,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPhotoUploadWrap = document.getElementById("rwPhotoUploadWrap");
   const rwPhotoInput = document.getElementById("rwPhotoInput");
   const rwPhotoList = document.getElementById("rwPhotoList");
+  const rwFrozensTools = document.getElementById("rwFrozensTools");
+  const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
+  const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
+  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
+  const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
+  const hpiVeryConcise = document.getElementById("hpiVeryConcise");
+  const hpiIncludeProcedure = document.getElementById("hpiIncludeProcedure");
+  const hpiIncludeDates = document.getElementById("hpiIncludeDates");
+  const hpiAggressiveAbbrev = document.getElementById("hpiAggressiveAbbrev");
+  const hpiMaxSentences = document.getElementById("hpiMaxSentences");
+  const hpiExtraInstruction = document.getElementById("hpiExtraInstruction");
   const rwCopy = document.getElementById("rwCopy");
   const rwCorrected = document.getElementById("rwCorrected");
 
@@ -456,6 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let rwGrossPhotoDataUrls = [];
+    let rwFrozensImageText = "";
 
     function renderGrossPhotoList() {
       if (!rwPhotoList) return;
@@ -469,6 +494,78 @@ document.addEventListener("DOMContentLoaded", () => {
     function setGrossPhotoVisibility(preset) {
       if (!rwPhotoUploadWrap) return;
       rwPhotoUploadWrap.classList.toggle("hidden", preset !== "gross_photo");
+    }
+    function setFrozensVisibility(preset) {
+      if (!rwFrozensTools) return;
+      rwFrozensTools.classList.toggle("hidden", preset !== "frozens_helper");
+    }
+    function setHpiConciserVisibility(preset) {
+      if (!rwHpiConciserTools) return;
+      rwHpiConciserTools.classList.toggle("hidden", preset !== "hpi_conciser");
+    }
+    function normalizeName(name) {
+      return String(name || "")
+        .replace(/\[[^\]]*]/g, "")
+        .replace(/\b(MD|DO|PA-C|PA|NP|RN|MBA|PhD|DDS|DPM)\b\.?/gi, "")
+        .replace(/\s+/g, " ")
+        .replace(/,\s*$/, "")
+        .trim();
+    }
+    function cleanPatient(name) {
+      return normalizeName(name)
+        .replace(/\b\d{1,3}\s*[MF]\b/gi, "")
+        .replace(/\b(?:male|female)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    function cleanProcedure(proc) {
+      return String(proc || "")
+        .replace(/\[[^\]]*]/g, "")
+        .replace(/\b\d+\.\s*/g, "")
+        .replace(/\bNeurolysis:\s*/gi, "neurolysis ")
+        .replace(/\bExcision,\s*Soft Tissue Mass,\s*Deep To Fascia,\s*(Left|Right)\s+([A-Za-z ]+)/gi, "Excision $1 $2 soft tissue mass")
+        .replace(/\bExcision,\s*Subcutaneous\s*(Left|Right)\s+([A-Za-z ]+?)\s+Cyst,\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\s*,\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\b(\d+\.)/g, "")
+        .trim()
+        .replace(/^./, (c) => c.toUpperCase());
+    }
+    function convertFrozensText(raw) {
+      const lines = String(raw || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const out = [];
+      for (const line of lines) {
+        const time = (line.match(/\b\d{1,2}:\d{2}\b|\b\d{3,4}\b/) || [""])[0];
+        const mrn = (line.match(/\b\d{6,10}\b/) || [""])[0];
+        const providerMatch = line.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?)\s*(?:\[|\bMD\b|\bDO\b)/);
+        const surgeon = normalizeName(providerMatch ? providerMatch[1] : "");
+        const patientMatch = line.match(/\b([A-Za-z' -]+,\s*[A-Za-z' -]+)(?:\s+\d{1,3}\s*[MF])?/);
+        const patient = cleanPatient(patientMatch ? patientMatch[1] : "");
+        let procedure = line;
+        [time, mrn, surgeon, patient].filter(Boolean).forEach((chunk) => {
+          procedure = procedure.replace(chunk, " ");
+        });
+        procedure = cleanProcedure(procedure);
+        if (time || surgeon || procedure || mrn || patient) {
+          out.push([time, surgeon, procedure, mrn, patient].join("\t"));
+        }
+      }
+      return out.join("\n");
+    }
+    function parseFrozensRows(raw) {
+      return convertFrozensText(raw)
+        .split("\n")
+        .filter(Boolean)
+        .map((row) => {
+          const [time = "", surgeon = "", procedure = "", mrn = "", patient = ""] = row.split("\t");
+          const orRoom = (raw.match(/\b(?:OR|RM|ROOM)\s*([A-Z]?\d{1,2})\b/i)?.[1] || "").toString();
+          return { time, orRoom, surgeon, procedure, mrn, patient };
+        });
+    }
+    async function ocrFrozensImage(file) {
+      if (!window.Tesseract) throw new Error("OCR library unavailable.");
+      const result = await window.Tesseract.recognize(file, "eng");
+      return String(result?.data?.text || "");
     }
 
     async function fileToDataUrl(file) {
@@ -529,6 +626,10 @@ document.addEventListener("DOMContentLoaded", () => {
     function setPlaceholdersForPreset(_preset) {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
+        : _preset === "frozens_helper"
+          ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
+        : _preset === "hpi_conciser"
+          ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
           ? "Paste timeline details (diagnosis, imaging, prior pathology, treatment history, surgeries)…"
           : "Ask anything or paste text here";
@@ -610,7 +711,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setRunButtonLabel(preset) {
-      rwRun.textContent = preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : "Refine ✨";
+      rwRun.textContent = preset === "frozens_helper" ? "Convert to Excel Row" : preset === "general" ? "Send ➜" : preset === "gross_photo" ? "Describe Photo ✨" : preset === "hpi" ? "Generate HPI ✨" : preset === "hpi_conciser" ? "Concise HPI" : "Refine ✨";
     }
 
     function normalizeOutputText(text) {
@@ -767,7 +868,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     rwInput.addEventListener("paste", async (e) => {
-      if (rwPreset !== "gross_photo") return;
+      if (rwPreset !== "gross_photo" && rwPreset !== "frozens_helper") return;
 
       const items = Array.from(e.clipboardData?.items || []);
       const imageFiles = items
@@ -778,8 +879,39 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!imageFiles.length) return;
 
       e.preventDefault();
-      await attachGrossPhotos(imageFiles, { replaceExisting: false });
+      if (rwPreset === "gross_photo") {
+        await attachGrossPhotos(imageFiles, { replaceExisting: false });
+      } else if (rwPreset === "frozens_helper") {
+        try {
+          rwFrozensImageText = await ocrFrozensImage(imageFiles[0]);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setStatus("OCR complete for Frozens Helper image.");
+        } catch (err) {
+          console.error(err);
+          setStatus("OCR failed for image.");
+        }
+      }
     });
+    if (rwFrozensImageInput) {
+      rwFrozensImageInput.addEventListener("change", async () => {
+        const file = rwFrozensImageInput.files?.[0];
+        if (!file) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "No image selected.";
+          return;
+        }
+        if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Running OCR…";
+        try {
+          rwFrozensImageText = await ocrFrozensImage(file);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setStatus("Frozens Helper screenshot OCR complete.");
+        } catch (_err) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "OCR failed. Try a clearer screenshot.";
+          setStatus("OCR failed for uploaded screenshot.");
+        }
+      });
+    }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwRules)
     rwRules.addEventListener("keydown", (e) => {
@@ -897,6 +1029,8 @@ document.addEventListener("DOMContentLoaded", () => {
         setPlaceholdersForPreset(rwPreset);
         syncTemplateVisibility(rwPreset);
         setGrossPhotoVisibility(rwPreset);
+        setFrozensVisibility(rwPreset);
+        setHpiConciserVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
         updateCorrectedButtonState();
 
@@ -917,6 +1051,73 @@ document.addEventListener("DOMContentLoaded", () => {
     rwRun.addEventListener("click", async (e) => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
+      if (rwPreset === "frozens_helper") {
+        const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
+        const historyText = String(rwFrozensHistory?.value || "").trim();
+        if (!combined.trim()) return setStatus("Paste OR text or upload/paste an OR schedule screenshot first.");
+        const parsedRows = parseFrozensRows(combined);
+        if (!parsedRows.length) return setStatus("Could not parse schedule row.");
+        let briefHistory = "";
+        if (historyText) {
+          const j = await apiPostJson("/api/rewrite", {
+            text: historyText,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: 0.1,
+            preset: "hpi",
+            rules: "Return plain text only. 1-2 concise sentences for BRIEF HISTORY, preserving age/sex, diagnosis, site/laterality, key path/imaging, treatment status. Use abbreviations.",
+            template: "",
+            imageDataUrls: [],
+            learningExamples: [],
+            clientDateContext: getClientDateContext(),
+          });
+          briefHistory = normalizeOutputText(j.text || "");
+        }
+        const excelRows = parsedRows.map((r) =>
+          ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
+        ).join("\n");
+        rwOutput.textContent = excelRows;
+        rwOutput.dataset.raw = excelRows;
+        rwCopy.disabled = !excelRows;
+        updateCorrectedButtonState();
+        setStatus("Done — generated Excel-ready row(s): GENERAL, TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT, BRIEF HISTORY, PRIOR PATH.");
+        return;
+      }
+      if (rwPreset === "hpi_conciser") {
+        if (!text) return setStatus("Paste HPI text first.");
+        const sentenceCap = hpiVeryConcise?.checked ? 1 : Number(hpiMaxSentences?.value || 2);
+        const optRules = [
+          "Rewrite into concise medical history for case-tracking spreadsheet.",
+          `Return plain text only, ${sentenceCap} sentence(s) maximum.`,
+          "Preserve key facts: age/sex, primary dx or mass, site/laterality, key imaging/biopsy findings, mets status if relevant, and current treatment/status.",
+          (hpiIncludeProcedure?.checked ? "Include key procedure/surgery details when clinically relevant." : "Exclude scheduling/procedure-plan language (planned surgery/resection/scheduled)."),
+          (hpiIncludeDates?.checked ? "Include only clinically meaningful dates." : "Omit dates unless required for clinical clarity."),
+          (hpiAggressiveAbbrev?.checked ? "Use aggressive medical abbreviations (M/F, LN, LAD, FNA, bx, MRI, CT, ERCP, s/p, c/f, DDLPS, PTC, RT, chemo)." : "Use standard concise medical abbreviations appropriately."),
+          "Avoid narrative filler, repeated dates, symptom lists unless critical, and long paragraphs.",
+          String(hpiExtraInstruction?.value || "").trim(),
+        ].filter(Boolean).join("\n");
+        try {
+          const j = await apiPostJson("/api/rewrite", {
+            text,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: 0.1,
+            preset: "hpi",
+            rules: optRules,
+            template: "",
+            imageDataUrls: [],
+            learningExamples: [],
+            clientDateContext: getClientDateContext(),
+          });
+          const conciseText = normalizeOutputText(j.text ?? "");
+          rwOutput.textContent = conciseText;
+          rwOutput.dataset.raw = conciseText;
+          rwCopy.disabled = !conciseText;
+          setStatus("Done — concise HPI generated.");
+        } catch (err) {
+          console.error("HPI conciser error:", err);
+          setStatus("HPI conciser error: " + (err?.message || String(err)));
+        }
+        return;
+      }
       const hasGrossPhotos = rwPreset === "gross_photo" && rwGrossPhotoDataUrls.length > 0;
       if (!text && !hasGrossPhotos) return setStatus("Type text or attach gross photo image(s) first.");
 
@@ -969,6 +1170,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setPlaceholdersForPreset("general");
     syncTemplateVisibility("general");
     setGrossPhotoVisibility("general");
+    setFrozensVisibility("general");
+    setHpiConciserVisibility("general");
     setRunButtonLabel("general");
     renderGrossPhotoList();
     updateCorrectedButtonState();
