@@ -607,6 +607,15 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
+      if (!surgeonClean) {
+        const tailProvider = afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),?\s*(?:Md|MD|Do|DO)\b/);
+        if (tailProvider) {
+          const inferredSurgeon = normalizeName(tailProvider[1]);
+          const procedureOnly = cleanProcedure(afterMrn.replace(tailProvider[0], "")).replace(/\s+/g, " ").trim();
+          return [{ time, orRoom, surgeon: inferredSurgeon, procedure: procedureOnly, mrn, patient }];
+        }
+      }
+      procedure = procedure.replace(new RegExp(`\\b${surgeonClean.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i"), "").replace(/\s+/g, " ").trim();
       return [{ time, orRoom, surgeon: surgeonClean, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
