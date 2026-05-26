@@ -445,9 +445,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPhotoInput = document.getElementById("rwPhotoInput");
   const rwPhotoList = document.getElementById("rwPhotoList");
   const rwFrozensTools = document.getElementById("rwFrozensTools");
-  const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
-  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
+  const rwExcelOutput = document.getElementById("rwExcelOutput");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
   const hpiVeryConcise = document.getElementById("hpiVeryConcise");
@@ -481,6 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let rwGrossPhotoDataUrls = [];
     let rwFrozensImageText = "";
+    let rwFrozensImageFile = null;
 
     function renderGrossPhotoList() {
       if (!rwPhotoList) return;
@@ -498,6 +498,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function setFrozensVisibility(preset) {
       if (!rwFrozensTools) return;
       rwFrozensTools.classList.toggle("hidden", preset !== "frozens_helper");
+      if (rwExcelOutput) rwExcelOutput.classList.toggle("hidden", preset !== "frozens_helper");
+      if (rwOutput) rwOutput.classList.toggle("hidden", preset === "frozens_helper");
     }
     function setHpiConciserVisibility(preset) {
       if (!rwHpiConciserTools) return;
@@ -627,7 +629,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
-          ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
+          ? "Paste patient HPI/history text here, then paste OR schedule screenshot (Ctrl/Cmd+V)."
         : _preset === "hpi_conciser"
           ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
@@ -844,6 +846,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (clearRules) rwRules.value = "";
       if (rwTemplate && rwPreset !== "micro" && rwPreset !== "gross") rwTemplate.value = "";
       rwGrossPhotoDataUrls = [];
+      rwFrozensImageFile = null;
+      rwFrozensImageText = "";
       if (rwPhotoInput) rwPhotoInput.value = "";
       renderGrossPhotoList();
     }
@@ -883,9 +887,10 @@ document.addEventListener("DOMContentLoaded", () => {
         await attachGrossPhotos(imageFiles, { replaceExisting: false });
       } else if (rwPreset === "frozens_helper") {
         try {
-          rwFrozensImageText = await ocrFrozensImage(imageFiles[0]);
-          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
-          setStatus("OCR complete for Frozens Helper image.");
+          rwFrozensImageFile = imageFiles[0];
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Screenshot pasted ✓ Ready to convert.";
+          setStatus("Screenshot captured for Frozens Helper. Click Convert to run OCR.");
         } catch (err) {
           console.error(err);
           setStatus("OCR failed for image.");
@@ -1052,10 +1057,15 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
-        const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
-        const historyText = String(rwFrozensHistory?.value || "").trim();
-        if (!combined.trim()) return setStatus("Paste OR text or upload/paste an OR schedule screenshot first.");
-        const parsedRows = parseFrozensRows(combined);
+        const historyText = text;
+        if (!rwFrozensImageFile && !rwFrozensImageText.trim()) return setStatus("Paste OR schedule screenshot into the Input box first.");
+        if (!rwFrozensImageText.trim() && rwFrozensImageFile) {
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Running OCR…";
+          setStatus("Running OCR on pasted screenshot…");
+          rwFrozensImageText = await ocrFrozensImage(rwFrozensImageFile);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "OCR complete ✓ Ready for Excel paste.";
+        }
+        const parsedRows = parseFrozensRows(rwFrozensImageText);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         let briefHistory = "";
         if (historyText) {
@@ -1075,7 +1085,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const excelRows = parsedRows.map((r) =>
           ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
         ).join("\n");
-        rwOutput.textContent = excelRows;
+        if (rwExcelOutput) rwExcelOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
         rwCopy.disabled = !excelRows;
         updateCorrectedButtonState();
@@ -1088,6 +1098,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const optRules = [
           "Rewrite into concise medical history for case-tracking spreadsheet.",
           `Return plain text only, ${sentenceCap} sentence(s) maximum.`,
+          "Hard limit: 200 characters maximum total.",
           "Preserve key facts: age/sex, primary dx or mass, site/laterality, key imaging/biopsy findings, mets status if relevant, and current treatment/status.",
           (hpiIncludeProcedure?.checked ? "Include key procedure/surgery details when clinically relevant." : "Exclude scheduling/procedure-plan language (planned surgery/resection/scheduled)."),
           (hpiIncludeDates?.checked ? "Include only clinically meaningful dates." : "Omit dates unless required for clinical clarity."),
@@ -1107,7 +1118,7 @@ document.addEventListener("DOMContentLoaded", () => {
             learningExamples: [],
             clientDateContext: getClientDateContext(),
           });
-          const conciseText = normalizeOutputText(j.text ?? "");
+          const conciseText = normalizeOutputText(j.text ?? "").slice(0, 200).trim();
           rwOutput.textContent = conciseText;
           rwOutput.dataset.raw = conciseText;
           rwCopy.disabled = !conciseText;
