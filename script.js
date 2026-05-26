@@ -409,6 +409,16 @@ document.addEventListener("DOMContentLoaded", () => {
       "dark:border-purple-500",
       "shadow-sm",
     ],
+    frozens_helper: [
+      "bg-indigo-600",
+      "text-white",
+      "border",
+      "border-indigo-600",
+      "dark:bg-indigo-500",
+      "dark:text-white",
+      "dark:border-indigo-500",
+      "shadow-sm",
+    ],
   };
 
   const INACTIVE_COLORS = [
@@ -431,6 +441,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPhotoUploadWrap = document.getElementById("rwPhotoUploadWrap");
   const rwPhotoInput = document.getElementById("rwPhotoInput");
   const rwPhotoList = document.getElementById("rwPhotoList");
+  const rwFrozensTools = document.getElementById("rwFrozensTools");
+  const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
+  const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwCopy = document.getElementById("rwCopy");
   const rwCorrected = document.getElementById("rwCorrected");
@@ -456,6 +469,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let rwGrossPhotoDataUrls = [];
+    let rwFrozensImageText = "";
 
     function renderGrossPhotoList() {
       if (!rwPhotoList) return;
@@ -469,6 +483,64 @@ document.addEventListener("DOMContentLoaded", () => {
     function setGrossPhotoVisibility(preset) {
       if (!rwPhotoUploadWrap) return;
       rwPhotoUploadWrap.classList.toggle("hidden", preset !== "gross_photo");
+    }
+    function setFrozensVisibility(preset) {
+      if (!rwFrozensTools) return;
+      rwFrozensTools.classList.toggle("hidden", preset !== "frozens_helper");
+    }
+    function normalizeName(name) {
+      return String(name || "")
+        .replace(/\[[^\]]*]/g, "")
+        .replace(/\b(MD|DO|PA-C|PA|NP|RN|MBA|PhD|DDS|DPM)\b\.?/gi, "")
+        .replace(/\s+/g, " ")
+        .replace(/,\s*$/, "")
+        .trim();
+    }
+    function cleanPatient(name) {
+      return normalizeName(name)
+        .replace(/\b\d{1,3}\s*[MF]\b/gi, "")
+        .replace(/\b(?:male|female)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    function cleanProcedure(proc) {
+      return String(proc || "")
+        .replace(/\[[^\]]*]/g, "")
+        .replace(/\b\d+\.\s*/g, "")
+        .replace(/\bNeurolysis:\s*/gi, "neurolysis ")
+        .replace(/\bExcision,\s*Soft Tissue Mass,\s*Deep To Fascia,\s*(Left|Right)\s+([A-Za-z ]+)/gi, "Excision $1 $2 soft tissue mass")
+        .replace(/\bExcision,\s*Subcutaneous\s*(Left|Right)\s+([A-Za-z ]+?)\s+Cyst,\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\s*,\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\b(\d+\.)/g, "")
+        .trim()
+        .replace(/^./, (c) => c.toUpperCase());
+    }
+    function convertFrozensText(raw) {
+      const lines = String(raw || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const out = [];
+      for (const line of lines) {
+        const time = (line.match(/\b\d{1,2}:\d{2}\b|\b\d{3,4}\b/) || [""])[0];
+        const mrn = (line.match(/\b\d{6,10}\b/) || [""])[0];
+        const providerMatch = line.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?)\s*(?:\[|\bMD\b|\bDO\b)/);
+        const surgeon = normalizeName(providerMatch ? providerMatch[1] : "");
+        const patientMatch = line.match(/\b([A-Za-z' -]+,\s*[A-Za-z' -]+)(?:\s+\d{1,3}\s*[MF])?/);
+        const patient = cleanPatient(patientMatch ? patientMatch[1] : "");
+        let procedure = line;
+        [time, mrn, surgeon, patient].filter(Boolean).forEach((chunk) => {
+          procedure = procedure.replace(chunk, " ");
+        });
+        procedure = cleanProcedure(procedure);
+        if (time || surgeon || procedure || mrn || patient) {
+          out.push([time, surgeon, procedure, mrn, patient].join("\t"));
+        }
+      }
+      return out.join("\n");
+    }
+    async function ocrFrozensImage(file) {
+      if (!window.Tesseract) throw new Error("OCR library unavailable.");
+      const result = await window.Tesseract.recognize(file, "eng");
+      return String(result?.data?.text || "");
     }
 
     async function fileToDataUrl(file) {
@@ -529,6 +601,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function setPlaceholdersForPreset(_preset) {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
+        : _preset === "frozens_helper"
+          ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
         : _preset === "hpi"
           ? "Paste timeline details (diagnosis, imaging, prior pathology, treatment history, surgeries)…"
           : "Ask anything or paste text here";
@@ -767,7 +841,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     rwInput.addEventListener("paste", async (e) => {
-      if (rwPreset !== "gross_photo") return;
+      if (rwPreset !== "gross_photo" && rwPreset !== "frozens_helper") return;
 
       const items = Array.from(e.clipboardData?.items || []);
       const imageFiles = items
@@ -778,8 +852,39 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!imageFiles.length) return;
 
       e.preventDefault();
-      await attachGrossPhotos(imageFiles, { replaceExisting: false });
+      if (rwPreset === "gross_photo") {
+        await attachGrossPhotos(imageFiles, { replaceExisting: false });
+      } else if (rwPreset === "frozens_helper") {
+        try {
+          rwFrozensImageText = await ocrFrozensImage(imageFiles[0]);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setStatus("OCR complete for Frozens Helper image.");
+        } catch (err) {
+          console.error(err);
+          setStatus("OCR failed for image.");
+        }
+      }
     });
+    if (rwFrozensImageInput) {
+      rwFrozensImageInput.addEventListener("change", async () => {
+        const file = rwFrozensImageInput.files?.[0];
+        if (!file) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "No image selected.";
+          return;
+        }
+        if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Running OCR…";
+        try {
+          rwFrozensImageText = await ocrFrozensImage(file);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setStatus("Frozens Helper screenshot OCR complete.");
+        } catch (_err) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "OCR failed. Try a clearer screenshot.";
+          setStatus("OCR failed for uploaded screenshot.");
+        }
+      });
+    }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwRules)
     rwRules.addEventListener("keydown", (e) => {
@@ -897,6 +1002,7 @@ document.addEventListener("DOMContentLoaded", () => {
         setPlaceholdersForPreset(rwPreset);
         syncTemplateVisibility(rwPreset);
         setGrossPhotoVisibility(rwPreset);
+        setFrozensVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
         updateCorrectedButtonState();
 
@@ -917,6 +1023,17 @@ document.addEventListener("DOMContentLoaded", () => {
     rwRun.addEventListener("click", async (e) => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
+      if (rwPreset === "frozens_helper") {
+        const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
+        if (!combined.trim()) return setStatus("Paste text or upload/paste an image first.");
+        const finalRows = convertFrozensText(combined);
+        rwOutput.textContent = finalRows;
+        rwOutput.dataset.raw = finalRows;
+        rwCopy.disabled = !finalRows;
+        updateCorrectedButtonState();
+        setStatus("Done — converted to tab-delimited Frozens Helper rows.");
+        return;
+      }
       const hasGrossPhotos = rwPreset === "gross_photo" && rwGrossPhotoDataUrls.length > 0;
       if (!text && !hasGrossPhotos) return setStatus("Type text or attach gross photo image(s) first.");
 
@@ -969,6 +1086,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setPlaceholdersForPreset("general");
     syncTemplateVisibility("general");
     setGrossPhotoVisibility("general");
+    setFrozensVisibility("general");
     setRunButtonLabel("general");
     renderGrossPhotoList();
     updateCorrectedButtonState();
