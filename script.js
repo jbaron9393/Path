@@ -445,8 +445,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPhotoInput = document.getElementById("rwPhotoInput");
   const rwPhotoList = document.getElementById("rwPhotoList");
   const rwFrozensTools = document.getElementById("rwFrozensTools");
+  const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
-  const rwExcelOutput = document.getElementById("rwExcelOutput");
+  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
   const hpiVeryConcise = document.getElementById("hpiVeryConcise");
@@ -497,8 +498,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function setFrozensVisibility(preset) {
       if (!rwFrozensTools) return;
       rwFrozensTools.classList.toggle("hidden", preset !== "frozens_helper");
-      if (rwExcelOutput) rwExcelOutput.classList.toggle("hidden", preset !== "frozens_helper");
-      if (rwOutput) rwOutput.classList.toggle("hidden", preset === "frozens_helper");
     }
     function setHpiConciserVisibility(preset) {
       if (!rwHpiConciserTools) return;
@@ -628,7 +627,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
-          ? "Paste patient HPI/history text here, then paste OR schedule screenshot (Ctrl/Cmd+V)."
+          ? "Paste OR schedule rows/text here. You can also upload/paste a screenshot below."
         : _preset === "hpi_conciser"
           ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
@@ -1053,9 +1052,10 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
-        const historyText = text;
-        if (!rwFrozensImageText.trim()) return setStatus("Paste OR schedule screenshot into the Input box first.");
-        const parsedRows = parseFrozensRows(rwFrozensImageText);
+        const combined = [text, rwFrozensImageText].filter(Boolean).join("\n");
+        const historyText = String(rwFrozensHistory?.value || "").trim();
+        if (!combined.trim()) return setStatus("Paste OR text or upload/paste an OR schedule screenshot first.");
+        const parsedRows = parseFrozensRows(combined);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         let briefHistory = "";
         if (historyText) {
@@ -1075,7 +1075,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const excelRows = parsedRows.map((r) =>
           ["", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, ""].join("\t")
         ).join("\n");
-        if (rwExcelOutput) rwExcelOutput.value = excelRows;
+        rwOutput.textContent = excelRows;
         rwOutput.dataset.raw = excelRows;
         rwCopy.disabled = !excelRows;
         updateCorrectedButtonState();
@@ -1088,7 +1088,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const optRules = [
           "Rewrite into concise medical history for case-tracking spreadsheet.",
           `Return plain text only, ${sentenceCap} sentence(s) maximum.`,
-          "Hard limit: 200 characters maximum total.",
           "Preserve key facts: age/sex, primary dx or mass, site/laterality, key imaging/biopsy findings, mets status if relevant, and current treatment/status.",
           (hpiIncludeProcedure?.checked ? "Include key procedure/surgery details when clinically relevant." : "Exclude scheduling/procedure-plan language (planned surgery/resection/scheduled)."),
           (hpiIncludeDates?.checked ? "Include only clinically meaningful dates." : "Omit dates unless required for clinical clarity."),
@@ -1108,7 +1107,7 @@ document.addEventListener("DOMContentLoaded", () => {
             learningExamples: [],
             clientDateContext: getClientDateContext(),
           });
-          const conciseText = normalizeOutputText(j.text ?? "").slice(0, 200).trim();
+          const conciseText = normalizeOutputText(j.text ?? "");
           rwOutput.textContent = conciseText;
           rwOutput.dataset.raw = conciseText;
           rwCopy.disabled = !conciseText;
