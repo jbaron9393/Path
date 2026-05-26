@@ -563,18 +563,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const beforeMrn = mrn ? compact.slice(0, mrnMatch.index).trim() : compact;
       const afterMrn = mrn ? compact.slice((mrnMatch.index || 0) + mrn.length).trim() : "";
 
-      const patientNameMatch = afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
-      const patient = cleanPatient(patientNameMatch?.[1] || "");
-
       const pre = beforeMrn
         .replace(new RegExp(`\\b${time.replace(":", "[:.]?")}\\b`), " ")
         .replace(orRoom, " ")
         .replace(/\s+/g, " ")
         .trim();
-      const surgeonMatch = pre.match(/([A-Z][a-z]+(?:,\s*|\s+)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const patientNameMatch = pre.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      const patient = cleanPatient(patientNameMatch?.[1] || "");
+
+      const surgeonMatch = afterMrn.match(/([A-Z][a-z]+(?:,\s*|\s+)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
       const surgeon = normalizeName(surgeonMatch?.[1] || "");
 
-      let procedure = pre;
+      let procedure = afterMrn;
       if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
       procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
       return [{ time, orRoom, surgeon, procedure, mrn, patient }];
@@ -1090,7 +1090,7 @@ document.addEventListener("DOMContentLoaded", () => {
           briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
         }
         const excelRows = parsedRows.map((r) =>
-          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
+          ["1", r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
         ).join("\n");
         rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
