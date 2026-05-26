@@ -399,19 +399,8 @@
             </div>
 
             <div id="rwFrozensTools" class="hidden space-y-2">
-              <label for="rwFrozensImageInput" class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                Upload/paste OR schedule screenshot
-              </label>
-              <input
-                id="rwFrozensImageInput"
-                type="file"
-                accept="image/*"
-                class="block w-full text-xs text-slate-700 dark:text-slate-200
-                file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0
-                file:bg-indigo-100 file:text-indigo-800 hover:file:bg-indigo-200"
-              />
               <div id="rwFrozensImageStatus" class="text-xs text-slate-500 dark:text-slate-400">
-                No image selected.
+                OR screenshot status will appear here after paste.
               </div>
               <label for="rwFrozensHistory" class="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Brief history input (optional)
@@ -450,21 +439,18 @@
           <div class="space-y-3">
             <label class="text-sm font-semibold text-slate-700 dark:text-slate-200">Output</label>
 
-            <div
+            <textarea
               id="rwOutput"
-              role="textbox"
-              aria-multiline="true"
-              contenteditable="true"
               spellcheck="false"
-              data-placeholder="Response will appear here…"
+              placeholder="Response will appear here…"
               class="rw-output w-full h-72 px-4 py-3 overflow-y-auto
               bg-slate-50 dark:bg-slate-900
               border border-slate-200 dark:border-slate-700
-              rounded-xl font-sans text-[15px] leading-relaxed tracking-tight
+              rounded-xl font-mono text-[14px] leading-relaxed tracking-tight whitespace-pre
               text-slate-900 dark:text-slate-100
               focus:outline-none focus:ring-2 focus:ring-primary-500
               focus:bg-white dark:focus:bg-slate-900 transition-all"
-            ></div>
+            ></textarea>
 
             <div class="flex justify-end gap-2 mt-2">
               <button
