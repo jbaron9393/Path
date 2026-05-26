@@ -522,11 +522,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
         .replace(/\b\d+\.\s*/g, "")
+        .replace(/\b\d+\)\s*/g, "")
         .replace(/\bNeurolysis:\s*/gi, "neurolysis ")
+        .replace(/\b3\.\s.*$/i, "")
+        .replace(/\bComplex Closure\b.*$/i, "")
+        .replace(/\bIntra-?Op\b.*$/i, "")
         .replace(/\bExcision,\s*Soft Tissue Mass,\s*Deep To Fascia,\s*(Left|Right)\s+([A-Za-z ]+)/gi, "Excision $1 $2 soft tissue mass")
         .replace(/\bExcision,\s*Subcutaneous\s*(Left|Right)\s+([A-Za-z ]+?)\s+Cyst,\s*\d+\s*cm/gi, "Excision $1 $2 cyst")
+        .replace(/\bRadical Resection\s+(Left|Right)\s+([A-Za-z ]+?)\s+Soft Tissue Sarcoma,\s*neurolysis\s*:?/gi, "Radical resection $1 $2 soft tissue sarcoma with neurolysis ")
+        .replace(/\b(Thyroidectomy),\s*Total\s*Or\s*Subtotal\s*,\s*(Dissection,\s*Neck)\b/gi, "$1, Total or Subtotal, $2")
         .replace(/\s*,\s*/g, " ")
         .replace(/\s+/g, " ")
+        .replace(/\s+\.\s*$/g, "")
         .replace(/\b(\d+\.)/g, "")
         .trim()
         .replace(/^./, (c) => c.toUpperCase());
@@ -579,11 +586,16 @@ document.addEventListener("DOMContentLoaded", () => {
         afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/)
         || afterMrn.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/);
       const surgeon = normalizeName(surgeonMatch?.[1] || "");
+      const surgeonClean = surgeon
+        .replace(/\b(Male|Female)\s+\d{1,3}\s+years?\b/gi, "")
+        .replace(/\bJr\b\.?/gi, "Jr")
+        .replace(/\s+/g, " ")
+        .trim();
 
       let procedure = afterMrn;
       if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
       procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
-      return [{ time, orRoom, surgeon, procedure, mrn, patient }];
+      return [{ time, orRoom, surgeon: surgeonClean, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
