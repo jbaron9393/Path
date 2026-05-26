@@ -893,6 +893,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
+    if (rwFrozensImageInput) {
+      rwFrozensImageInput.addEventListener("change", async () => {
+        const file = rwFrozensImageInput.files?.[0];
+        if (!file) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "No image selected.";
+          return;
+        }
+        if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Running OCR…";
+        try {
+          rwFrozensImageText = await ocrFrozensImage(file);
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setStatus("Frozens Helper screenshot OCR complete.");
+        } catch (_err) {
+          rwFrozensImageText = "";
+          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "OCR failed. Try a clearer screenshot.";
+          setStatus("OCR failed for uploaded screenshot.");
+        }
+      });
+    }
 
     // Enter = submit, Ctrl/Cmd + Enter = newline (rwRules)
     rwRules.addEventListener("keydown", (e) => {
