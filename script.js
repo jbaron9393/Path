@@ -891,6 +891,33 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+
+    const RW_OUTPUT_INPUT_STYLE_CLASSES = [
+      "font-sans",
+      "text-[15px]",
+      "leading-relaxed",
+      "tracking-tight",
+      "whitespace-pre-wrap",
+      "break-words",
+    ];
+    const RW_OUTPUT_FROZENS_STYLE_CLASSES = [
+      "font-mono",
+      "text-[14px]",
+      "leading-relaxed",
+      "tracking-tight",
+      "whitespace-pre",
+    ];
+
+    function setRwOutputTypography(preset) {
+      if (!rwOutput) return;
+      rwOutput.classList.remove(...RW_OUTPUT_INPUT_STYLE_CLASSES, ...RW_OUTPUT_FROZENS_STYLE_CLASSES);
+      if (preset === "frozens_helper") {
+        rwOutput.classList.add(...RW_OUTPUT_FROZENS_STYLE_CLASSES);
+      } else {
+        rwOutput.classList.add(...RW_OUTPUT_INPUT_STYLE_CLASSES);
+      }
+    }
+
     function clearRewriterFields({ clearRules } = { clearRules: true }) {
       rwInput.value = "";
       rwOutput.value = "";
@@ -1088,6 +1115,7 @@ document.addEventListener("DOMContentLoaded", () => {
         setFrozensVisibility(rwPreset);
         setHpiConciserVisibility(rwPreset);
         setRunButtonLabel(rwPreset);
+        setRwOutputTypography(rwPreset);
         updateCorrectedButtonState();
 
         setStatus(`Rewriter mode: ${rwPreset}`);
@@ -1229,6 +1257,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setFrozensVisibility("general");
     setHpiConciserVisibility("general");
     setRunButtonLabel("general");
+    setRwOutputTypography("general");
     renderGrossPhotoList();
     updateCorrectedButtonState();
 
