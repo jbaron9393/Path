@@ -570,74 +570,47 @@ document.addEventListener("DOMContentLoaded", () => {
       return out.join("\n");
     }
     function parseFrozensRows(raw) {
-      const compact = String(raw || "")
-        .replace(/\|/g, " ")
-        .replace(/\r?\n/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+      const compact = String(raw || "").replace(/\|/g, " ").replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
       if (!compact) return [];
-      const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
+
+      const timeMatch = compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/);
+      const time = (timeMatch?.[0] || "").replace(".", ":");
       const orRoomRaw = (compact.match(/\b([A-Z]{2,5}\s*\d{1,2})\b/) || ["", ""])[1];
-      const orRoom = (orRoomRaw || "")
-        .replace(/^([A-Z]{3})O(\d{2})$/i, "$1 $2")
-        .replace(/^([A-Z]{2,5})\s*(\d{1,2})$/, "$1 $2");
+      const orRoom = (orRoomRaw || "").replace(/^([A-Z]{3})O(\d{2})$/i, "$1 $2").replace(/^([A-Z]{2,5})\s*(\d{1,2})$/, "$1 $2");
       const mrnMatch = compact.match(/\b(\d{6,10})\b/);
       const mrn = mrnMatch?.[1] || "";
+      if (!mrn) return [];
 
-      const beforeMrn = mrn ? compact.slice(0, mrnMatch.index).trim() : compact;
-      const afterMrn = mrn ? compact.slice((mrnMatch.index || 0) + mrn.length).trim() : "";
+      const beforeMrn = compact.slice(0, mrnMatch.index).trim();
+      const afterMrn = compact.slice((mrnMatch.index || 0) + mrn.length).trim();
 
-      const pre = beforeMrn
-        .replace(new RegExp(`\\b${time.replace(":", "[:.]?")}\\b`), " ")
+      const patientChunk = beforeMrn
+        .replace(new RegExp(`\\b${time.replace(":", "[:.]?")}\\b`, "i"), " ")
         .replace(orRoom, " ")
         .replace(/\s+/g, " ")
         .trim();
-      const patientNameMatch = pre.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
-      const patient = cleanPatient(patientNameMatch?.[1] || "");
-
-      const surgeonMatch =
-        afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/)
-        || afterMrn.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=\s*(?:Md|MD|Do|DO|\[|$))/);
-      const surgeon = normalizeName(surgeonMatch?.[1] || "");
-      const surgeonClean = surgeon
-        .replace(/\b(Male|Female)\s+\d{1,3}\s+years?\b/gi, "")
-        .replace(/\bJr\b\.?/gi, "Jr")
+      const patientMatch = patientChunk.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?)/);
+      const patient = cleanPatient(patientMatch?.[1] || patientChunk)
+        .replace(/\b(Male|Female)\b/gi, "")
+        .replace(/\b\d{1,3}\s*years?\b/gi, "")
         .replace(/\s+/g, " ")
         .trim();
 
-      let procedure = afterMrn;
-      if (surgeonMatch?.[1]) procedure = procedure.replace(surgeonMatch[1], " ");
-      if (!surgeon) {
-        const embeddedSurgeon =
-          procedure.match(/\b([A-Z][a-z]+),\s*([A-Z][a-z]+)\s+([A-Z][a-z]+),?\s*(?:Md|MD|Do|DO)\b/)
-          || procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+(?:Md|MD|Do|DO)\b/);
-        if (embeddedSurgeon) {
-          const inferred = `${embeddedSurgeon[1]}, ${embeddedSurgeon[2]} ${embeddedSurgeon[3]}`;
-          procedure = procedure.replace(embeddedSurgeon[0], " ");
-          const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
-          return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
-        }
-        const embeddedWithDemographic = procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\.?\s+(?:Male|Female)\b/);
-        if (embeddedWithDemographic) {
-          const inferred = `${embeddedWithDemographic[1]}, ${embeddedWithDemographic[2]} ${embeddedWithDemographic[3]}`;
-          procedure = procedure.replace(embeddedWithDemographic[0], " ");
-          const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
-          return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
-        }
-      }
-      procedure = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
-      if (!surgeonClean) {
-        const tailProvider =
-          afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),?\s*(?:Md|MD|Do|DO)\b/)
-          || afterMrn.match(/([A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*$/);
-        if (tailProvider) {
-          const inferredSurgeon = normalizeName(tailProvider[1]);
-          const procedureOnly = cleanProcedure(afterMrn.replace(tailProvider[0], "")).replace(/\s+/g, " ").trim();
-          return [{ time, orRoom, surgeon: inferredSurgeon, procedure: procedureOnly, mrn, patient }];
-        }
-      }
-      procedure = procedure.replace(new RegExp(`\\b${surgeonClean.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i"), "").replace(/\s+/g, " ").trim();
-      return [{ time, orRoom, surgeon: surgeonClean, procedure, mrn, patient }];
+      const surgeonTailMatch = afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
+      const surgeonRaw = surgeonTailMatch?.[1] || "";
+      const surgeon = normalizeName(surgeonRaw).replace(/\s+/g, " ").trim();
+
+      let procedureRaw = surgeonTailMatch ? afterMrn.slice(0, surgeonTailMatch.index).trim() : afterMrn;
+      procedureRaw = procedureRaw
+        .replace(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/i, " ")
+        .replace(/\b(Male|Female)\b/gi, " ")
+        .replace(/\b\d{1,3}\s*years?\b/gi, " ")
+        .replace(/\[[^\]]*]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const procedure = cleanProcedure(procedureRaw).replace(/\s+/g, " ").trim();
+
+      return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
