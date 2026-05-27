@@ -568,7 +568,10 @@ document.addEventListener("DOMContentLoaded", () => {
         .trim();
       if (!compact) return [];
       const time = (compact.match(/\b([01]?\d|2[0-3])[:.]?[0-5]\d\b|\b\d{4}\b/) || [""])[0].replace(".", ":");
-      const orRoom = (compact.match(/\b([A-Z]{2,4}\s*\d{1,2})\b/) || ["", ""])[1];
+      const orRoomRaw = (compact.match(/\b([A-Z]{2,5}\s*\d{1,2})\b/) || ["", ""])[1];
+      const orRoom = (orRoomRaw || "")
+        .replace(/^([A-Z]{3})O(\d{2})$/i, "$1 $2")
+        .replace(/^([A-Z]{2,5})\s*(\d{1,2})$/, "$1 $2");
       const mrnMatch = compact.match(/\b(\d{6,10})\b/);
       const mrn = mrnMatch?.[1] || "";
 
@@ -602,6 +605,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (embeddedSurgeon) {
           const inferred = `${embeddedSurgeon[1]}, ${embeddedSurgeon[2]} ${embeddedSurgeon[3]}`;
           procedure = procedure.replace(embeddedSurgeon[0], " ");
+          const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
+          return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
+        }
+        const embeddedWithDemographic = procedure.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s+([A-Z][a-z]+)\.?\s+(?:Male|Female)\b/);
+        if (embeddedWithDemographic) {
+          const inferred = `${embeddedWithDemographic[1]}, ${embeddedWithDemographic[2]} ${embeddedWithDemographic[3]}`;
+          procedure = procedure.replace(embeddedWithDemographic[0], " ");
           const cleaned = cleanProcedure(procedure).replace(/\s+/g, " ").trim();
           return [{ time, orRoom, surgeon: normalizeName(inferred), procedure: cleaned, mrn, patient }];
         }
