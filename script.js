@@ -445,7 +445,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwPhotoInput = document.getElementById("rwPhotoInput");
   const rwPhotoList = document.getElementById("rwPhotoList");
   const rwFrozensTools = document.getElementById("rwFrozensTools");
-  const rwFrozensImageInput = document.getElementById("rwFrozensImageInput");
+  const rwFrozensDropZone = document.getElementById("rwFrozensDropZone");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
   const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
@@ -481,6 +481,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let rwGrossPhotoDataUrls = [];
     let rwFrozensImageText = "";
+    function setFrozensImageState(loaded, message) {
+      if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = loaded ? `✅ ${message}` : message;
+      if (rwFrozensDropZone) {
+        rwFrozensDropZone.classList.toggle("border-emerald-500", loaded);
+        rwFrozensDropZone.classList.toggle("dark:border-emerald-400", loaded);
+        rwFrozensDropZone.classList.toggle("bg-emerald-50", loaded);
+        rwFrozensDropZone.classList.toggle("dark:bg-emerald-950/30", loaded);
+      }
+    }
 
     function renderGrossPhotoList() {
       if (!rwPhotoList) return;
@@ -939,6 +948,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (clearRules) rwRules.value = "";
       if (rwTemplate && rwPreset !== "micro" && rwPreset !== "gross") rwTemplate.value = "";
       rwGrossPhotoDataUrls = [];
+      rwFrozensImageText = "";
+      setFrozensImageState(false, "Waiting for screenshot…");
       if (rwPhotoInput) rwPhotoInput.value = "";
       renderGrossPhotoList();
     }
@@ -979,7 +990,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (rwPreset === "frozens_helper") {
         try {
           rwFrozensImageText = await ocrFrozensImage(imageFiles[0]);
-          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
+          setFrozensImageState(true, "Screenshot loaded successfully");
           setStatus("OCR complete for Frozens Helper image.");
         } catch (err) {
           console.error(err);
@@ -987,24 +998,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
-    if (rwFrozensImageInput) {
-      rwFrozensImageInput.addEventListener("change", async () => {
-        const file = rwFrozensImageInput.files?.[0];
-        if (!file) {
-          rwFrozensImageText = "";
-          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "No image selected.";
-          return;
-        }
-        if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Running OCR…";
-        try {
-          rwFrozensImageText = await ocrFrozensImage(file);
-          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "Image OCR complete. Ready to convert.";
-          setStatus("Frozens Helper screenshot OCR complete.");
-        } catch (_err) {
-          rwFrozensImageText = "";
-          if (rwFrozensImageStatus) rwFrozensImageStatus.textContent = "OCR failed. Try a clearer screenshot.";
-          setStatus("OCR failed for uploaded screenshot.");
-        }
+    if (rwFrozensDropZone) {
+      rwFrozensDropZone.addEventListener("paste", async (e) => {
+        if (rwPreset !== "frozens_helper") return;
+        const items = Array.from(e.clipboardData?.items || []);
+        const file = items.find((item) => item.kind === "file" && String(item.type || "").startsWith("image/"))?.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+        setFrozensImageState(false, "Running OCR…");
+        rwFrozensImageText = await ocrFrozensImage(file);
+        setFrozensImageState(true, "Screenshot loaded successfully");
+      });
+      rwFrozensDropZone.addEventListener("dragover", (e) => e.preventDefault());
+      rwFrozensDropZone.addEventListener("drop", async (e) => {
+        if (rwPreset !== "frozens_helper") return;
+        e.preventDefault();
+        const file = Array.from(e.dataTransfer?.files || []).find((f) => String(f.type || "").startsWith("image/"));
+        if (!file) return;
+        setFrozensImageState(false, "Running OCR…");
+        rwFrozensImageText = await ocrFrozensImage(file);
+        setFrozensImageState(true, "Screenshot loaded successfully");
       });
     }
 
@@ -1057,6 +1070,11 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error("Copy failed:", err);
         setStatus("Copy failed.");
       }
+    });
+    rwOutput.addEventListener("click", () => {
+      if (rwPreset !== "frozens_helper") return;
+      rwOutput.focus();
+      rwOutput.select();
     });
 
     const rwCorrectedOriginal = {
@@ -1154,28 +1172,40 @@ document.addEventListener("DOMContentLoaded", () => {
         const parsedRows = parseFrozensRows(combined);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         let briefHistory = "";
+        let priorPath = "";
         if (historyText) {
           const j = await apiPostJson("/api/rewrite", {
             text: historyText,
             model: modelEl?.value || "gpt-4.1-mini",
             temperature: 0.1,
             preset: "hpi",
-            rules: "Return plain text only, max 2 sentences and hard max 200 characters total including spaces. Preserve only essential age/sex + dx/site/status. Use abbreviations.",
+            rules: "Return concise pathology-focused BRIEF HPI only. Max 200 characters. Include diagnosis, site, relevant prior treatment, and indication for surgery.",
             template: "",
             imageDataUrls: [],
             learningExamples: [],
             clientDateContext: getClientDateContext(),
           });
           briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
+          const p = await apiPostJson("/api/rewrite", {
+            text: historyText,
+            model: modelEl?.value || "gpt-4.1-mini",
+            temperature: 0.1,
+            preset: "hpi",
+            rules: "Return only PRIOR PATH summary. Mention in-house/outside/none and include case numbers if available. If unavailable return blank. Plain text only.",
+            template: "",
+            imageDataUrls: [],
+            learningExamples: [],
+            clientDateContext: getClientDateContext(),
+          });
+          priorPath = normalizeOutputText(p.text || "").replace(/\s+/g, " ").trim();
         }
-        const excelRows = parsedRows.map((r) =>
-          [r.time, r.orRoom, r.surgeon, r.procedure, r.mrn, r.patient, briefHistory, "none"].join("\t")
-        ).join("\n");
+        const first = parsedRows[0];
+        const excelRows = [first.time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient, briefHistory, priorPath].join("\t");
         rwOutput.value = excelRows;
         rwOutput.dataset.raw = excelRows;
         rwCopy.disabled = !excelRows;
         updateCorrectedButtonState();
-        setStatus("Done — generated Excel-ready row(s): GENERAL, TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT, BRIEF HISTORY, PRIOR PATH.");
+        setStatus("Done — generated one Excel-ready frozen row.");
         return;
       }
       if (rwPreset === "hpi_conciser") {
