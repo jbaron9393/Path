@@ -527,6 +527,13 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\s+/g, " ")
         .trim();
     }
+    function formatNameNoComma(name) {
+      const cleaned = normalizeName(name).replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+      if (!cleaned) return "";
+      const parts = cleaned.split(" ").filter(Boolean);
+      if (parts.length < 2) return cleaned;
+      return `${parts[0]}, ${parts.slice(1).join(" ")}`;
+    }
     function cleanProcedure(proc) {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
@@ -597,25 +604,56 @@ document.addEventListener("DOMContentLoaded", () => {
         .trim();
 
       const surgeonTailMatch = afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
-      const surgeonRaw = surgeonTailMatch?.[1] || "";
-      const surgeon = normalizeName(surgeonRaw).replace(/\s+/g, " ").trim();
+      const surgeonNoCommaMatch = afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
+      const surgeonRaw = surgeonTailMatch?.[1] || surgeonNoCommaMatch?.[1] || "";
+      const surgeon = (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw)).replace(/\s+/g, " ").trim();
 
       let procedureRaw = surgeonTailMatch ? afterMrn.slice(0, surgeonTailMatch.index).trim() : afterMrn;
       procedureRaw = procedureRaw
         .replace(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/i, " ")
         .replace(/\b(Male|Female)\b/gi, " ")
         .replace(/\b\d{1,3}\s*years?\b/gi, " ")
+        .replace(/\b(?:Md|MD|Do|DO)\b/g, " ")
         .replace(/\[[^\]]*]/g, " ")
+        .replace(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\b/g, (m) => {
+          // remove likely provider names embedded in OCR procedure line
+          if (surgeonRaw && m.toLowerCase() === surgeonRaw.toLowerCase()) return " ";
+          return m;
+        })
         .replace(/\s+/g, " ")
         .trim();
-      const procedure = cleanProcedure(procedureRaw).replace(/\s+/g, " ").trim();
+      let procedure = cleanProcedure(procedureRaw)
+        .replace(/\bEua\b/gi, "EUA")
+        .replace(/\bAnoscpopy\b/gi, "anoscopy")
+        .replace(/\bTransrectal\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      procedure = procedure
+        .replace(/\bIncision And Drainage Of\b/gi, "incision and drainage of")
+        .replace(/\bEUA\s+anoscopy\b/i, "EUA, anoscopy")
+        .replace(/^([A-Z]{2,}),\s*/i, "$1, ");
 
       return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
+    function normalizeFrozensOcrText(text) {
+      return String(text || "")
+        .replace(/[|]/g, " ")
+        .replace(/[“”]/g, '"')
+        .replace(/[’]/g, "'")
+        .replace(/CEN0(\d)/gi, "CEN $1")
+        .replace(/CEN(\d{2})/gi, "CEN $1")
+        .replace(/([A-Z]{3})O(\d{2})/g, "$1 $2")
+        .replace(/0R/g, "OR")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
-      const result = await window.Tesseract.recognize(file, "eng");
-      return String(result?.data?.text || "");
+      const result = await window.Tesseract.recognize(file, "eng", {
+        tessedit_pageseg_mode: "6",
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,:.-[]()/# '&",
+      });
+      return normalizeFrozensOcrText(String(result?.data?.text || ""));
     }
 
     async function fileToDataUrl(file) {
@@ -1140,45 +1178,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
         const combined = rwFrozensImageText;
-        const historyText = String(text || rwFrozensHistory?.value || "").trim();
         if (!combined.trim()) return setStatus("Paste an OR schedule screenshot first.");
         const parsedRows = parseFrozensRows(combined);
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
-        let briefHistory = "";
-        let priorPath = "";
-        if (historyText) {
-          const j = await apiPostJson("/api/rewrite", {
-            text: historyText,
-            model: modelEl?.value || "gpt-4.1-mini",
-            temperature: 0.1,
-            preset: "hpi",
-            rules: "Return concise pathology-focused BRIEF HPI only. Max 200 characters. Include diagnosis, site, relevant prior treatment, and indication for surgery.",
-            template: "",
-            imageDataUrls: [],
-            learningExamples: [],
-            clientDateContext: getClientDateContext(),
-          });
-          briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
-          const p = await apiPostJson("/api/rewrite", {
-            text: historyText,
-            model: modelEl?.value || "gpt-4.1-mini",
-            temperature: 0.1,
-            preset: "hpi",
-            rules: "Return only PRIOR PATH summary. Mention in-house/outside/none and include case numbers if available. If unavailable return blank. Plain text only.",
-            template: "",
-            imageDataUrls: [],
-            learningExamples: [],
-            clientDateContext: getClientDateContext(),
-          });
-          priorPath = normalizeOutputText(p.text || "").replace(/\s+/g, " ").trim();
-        }
         const first = parsedRows[0];
-        const excelRows = [first.time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient, briefHistory, priorPath].join("\t");
-        rwOutput.value = excelRows;
-        rwOutput.dataset.raw = excelRows;
-        rwCopy.disabled = !excelRows;
+        const time = String(first.time || "").replace(":", "");
+        const sixColRow = [time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient].join("\t");
+        rwOutput.value = sixColRow;
+        rwOutput.dataset.raw = sixColRow;
+        rwCopy.disabled = !sixColRow;
         updateCorrectedButtonState();
-        setStatus("Done — generated one Excel-ready frozen row.");
+        setStatus("Done — generated one Excel-ready row (TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT).");
         return;
       }
       if (rwPreset === "hpi_conciser") {

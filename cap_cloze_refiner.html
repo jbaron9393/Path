@@ -357,6 +357,19 @@
 
               
 
+
+              <button
+                type="button"
+                class="rwPreset text-xs px-3 py-1.5 rounded-lg
+                border border-slate-200 dark:border-slate-700
+                bg-white/70 dark:bg-slate-800/70
+                text-slate-700 dark:text-slate-200
+                shadow-sm transition-all"
+                data-preset="frozens_helper"
+              >
+                Frozen Helper
+              </button>
+
               <button
                 type="button"
                 class="rwPreset text-xs px-3 py-1.5 rounded-lg
@@ -389,6 +402,23 @@
             </div>
 
             
+
+
+            <div id="rwFrozensTools" class="hidden space-y-2 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/30">
+              <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">Frozen Helper</div>
+              <div
+                id="rwFrozensDropZone"
+                class="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 p-3 text-xs text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/40"
+              >
+                Paste or drop OR schedule screenshot here.
+              </div>
+              <div id="rwFrozensImageStatus" class="text-xs text-slate-500 dark:text-slate-400">Waiting for screenshot…</div>
+              <textarea
+                id="rwFrozensHistory"
+                placeholder="Optional HPI / clinical history (or paste in Input box)."
+                class="w-full h-20 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+              ></textarea>
+            </div>
 
             <div id="rwHpiConciserTools" class="hidden space-y-2 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/30">
               <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">HPI Conciser options</div>
