@@ -533,6 +533,41 @@ document.addEventListener("DOMContentLoaded", () => {
       if (parts.length < 2) return cleaned;
       return `${parts[0]}, ${parts.slice(1).join(" ")}`;
     }
+
+    function findSurgeonBox(text) {
+      const source = String(text || "");
+      const bracketMatches = Array.from(source.matchAll(/\[\s*\d[\d\s,.-]*\]/g));
+      for (let i = bracketMatches.length - 1; i >= 0; i -= 1) {
+        const bracket = bracketMatches[i];
+        const bracketStart = bracket.index || 0;
+        const prefix = source.slice(0, bracketStart).replace(/\s+/g, " ").trim();
+        const tail = prefix.slice(-100).trim();
+        const commaNameMatch = tail.match(/((?:[A-Za-z'\-]+(?:\s+[A-Za-z'\-]+){0,2}),\s*[A-Za-z'\-]+(?:\s+[A-Za-z'\-]+){0,2}(?:\s*,?\s*(?:Md|MD|Do|DO))?)\s*$/);
+        let name = commaNameMatch ? normalizeName(commaNameMatch[1]) : "";
+        let nameStart = commaNameMatch ? bracketStart - tail.length + commaNameMatch.index : -1;
+
+        if (!name) {
+          const withoutCredentials = tail.replace(/\b(?:Md|MD|Do|DO)\b\.?\s*$/g, "").trim();
+          const wordMatches = Array.from(withoutCredentials.matchAll(/\b[A-Z][A-Za-z'\-]+\b/g));
+          const nameWords = wordMatches.slice(-2).map((match) => match[0]);
+          if (nameWords.length >= 2) {
+            name = formatNameNoComma(nameWords.join(" "));
+            nameStart = bracketStart - tail.length + wordMatches[wordMatches.length - nameWords.length].index;
+          }
+        }
+
+        if (name) {
+          return {
+            name,
+            start: Math.max(0, nameStart),
+            end: bracketStart + bracket[0].length,
+            raw: source.slice(Math.max(0, nameStart), bracketStart + bracket[0].length),
+          };
+        }
+      }
+      return null;
+    }
+
     function cleanProcedure(proc) {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
@@ -560,12 +595,13 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const line of lines) {
         const time = (line.match(/\b\d{1,2}:\d{2}\b|\b\d{3,4}\b/) || [""])[0];
         const mrn = (line.match(/\b\d{6,10}\b/) || [""])[0];
+        const surgeonBox = findSurgeonBox(line);
         const providerMatch = line.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?)\s*(?:\[|\bMD\b|\bDO\b)/);
-        const surgeon = normalizeName(providerMatch ? providerMatch[1] : "");
+        const surgeon = surgeonBox?.name || normalizeName(providerMatch ? providerMatch[1] : "");
         const patientMatch = line.match(/\b([A-Za-z' -]+,\s*[A-Za-z' -]+)(?:\s+\d{1,3}\s*[MF])?/);
         const patient = cleanPatient(patientMatch ? patientMatch[1] : "");
         let procedure = line;
-        [time, mrn, surgeon, patient].filter(Boolean).forEach((chunk) => {
+        [time, mrn, surgeonBox?.raw, surgeon, patient].filter(Boolean).forEach((chunk) => {
           procedure = procedure.replace(chunk, " ");
         });
         procedure = cleanProcedure(procedure);
@@ -602,12 +638,17 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\s+/g, " ")
         .trim();
 
-      const surgeonTailMatch = afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
-      const surgeonNoCommaMatch = afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
+      const surgeonBox = findSurgeonBox(afterMrn);
+      const surgeonTailMatch = surgeonBox ? null : afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
+      const surgeonNoCommaMatch = surgeonBox ? null : afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
       const surgeonRaw = surgeonTailMatch?.[1] || surgeonNoCommaMatch?.[1] || "";
-      const surgeon = (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw)).replace(/\s+/g, " ").trim();
+      const surgeon = (surgeonBox?.name || (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw))).replace(/\s+/g, " ").trim();
 
-      let procedureRaw = surgeonTailMatch ? afterMrn.slice(0, surgeonTailMatch.index).trim() : afterMrn;
+      let procedureRaw = surgeonBox
+        ? `${afterMrn.slice(0, surgeonBox.start)} ${afterMrn.slice(surgeonBox.end)}`.trim()
+        : surgeonTailMatch
+          ? afterMrn.slice(0, surgeonTailMatch.index).trim()
+          : afterMrn;
       procedureRaw = procedureRaw
         .replace(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/i, " ")
         .replace(/\b(Male|Female)\b/gi, " ")
