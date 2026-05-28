@@ -447,7 +447,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwFrozensTools = document.getElementById("rwFrozensTools");
   const rwFrozensDropZone = document.getElementById("rwFrozensDropZone");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
-  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
   const hpiVeryConcise = document.getElementById("hpiVeryConcise");
@@ -571,7 +570,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         procedure = cleanProcedure(procedure);
         if (time || surgeon || procedure || mrn || patient) {
-          out.push([time, surgeon, procedure, mrn, patient].join("\t"));
+          out.push([time, patient, procedure, mrn, surgeon].join("\t"));
         }
       }
       return out.join("\n");
@@ -715,7 +714,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
-          ? "Paste patient HPI/history here. OR schedule screenshot OCR text is added automatically when you paste a screenshot."
+          ? "Paste or drop an OR schedule screenshot; OCR text is added automatically."
         : _preset === "hpi_conciser"
           ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
@@ -1183,12 +1182,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         const first = parsedRows[0];
         const time = String(first.time || "").replace(":", "");
-        const sixColRow = [time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient].join("\t");
+        const sixColRow = [time, first.orRoom, first.patient, first.procedure, first.mrn, first.surgeon].join("\t");
         rwOutput.value = sixColRow;
         rwOutput.dataset.raw = sixColRow;
         rwCopy.disabled = !sixColRow;
         updateCorrectedButtonState();
-        setStatus("Done — generated one Excel-ready row (TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT).");
+        setStatus("Done — generated one Excel-ready row (TIME, ROOM, PATIENT, PROCEDURE, MRN, SURGEON).");
         return;
       }
       if (rwPreset === "hpi_conciser") {
