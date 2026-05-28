@@ -635,10 +635,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
       return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
+    function normalizeFrozensOcrText(text) {
+      return String(text || "")
+        .replace(/[|]/g, " ")
+        .replace(/[“”]/g, '"')
+        .replace(/[’]/g, "'")
+        .replace(/CEN0(\d)/gi, "CEN $1")
+        .replace(/CEN(\d{2})/gi, "CEN $1")
+        .replace(/([A-Z]{3})O(\d{2})/g, "$1 $2")
+        .replace(/0R/g, "OR")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
     async function ocrFrozensImage(file) {
       if (!window.Tesseract) throw new Error("OCR library unavailable.");
-      const result = await window.Tesseract.recognize(file, "eng");
-      return String(result?.data?.text || "");
+      const result = await window.Tesseract.recognize(file, "eng", {
+        tessedit_pageseg_mode: "6",
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,:.-[]()/# '&",
+      });
+      return normalizeFrozensOcrText(String(result?.data?.text || ""));
     }
 
     async function fileToDataUrl(file) {
@@ -1165,8 +1180,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const combined = rwFrozensImageText;
         const historyText = String(text || rwFrozensHistory?.value || "").trim();
         if (!combined.trim()) return setStatus("Paste an OR schedule screenshot first.");
-        const parsedRows = parseFrozensRows(combined);
-        if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         let briefHistory = "";
         let priorPath = "";
         if (historyText) {
