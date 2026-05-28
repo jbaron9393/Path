@@ -527,6 +527,13 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\s+/g, " ")
         .trim();
     }
+    function formatNameNoComma(name) {
+      const cleaned = normalizeName(name).replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+      if (!cleaned) return "";
+      const parts = cleaned.split(" ").filter(Boolean);
+      if (parts.length < 2) return cleaned;
+      return `${parts[0]}, ${parts.slice(1).join(" ")}`;
+    }
     function cleanProcedure(proc) {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
@@ -597,18 +604,34 @@ document.addEventListener("DOMContentLoaded", () => {
         .trim();
 
       const surgeonTailMatch = afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
-      const surgeonRaw = surgeonTailMatch?.[1] || "";
-      const surgeon = normalizeName(surgeonRaw).replace(/\s+/g, " ").trim();
+      const surgeonNoCommaMatch = afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
+      const surgeonRaw = surgeonTailMatch?.[1] || surgeonNoCommaMatch?.[1] || "";
+      const surgeon = (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw)).replace(/\s+/g, " ").trim();
 
       let procedureRaw = surgeonTailMatch ? afterMrn.slice(0, surgeonTailMatch.index).trim() : afterMrn;
       procedureRaw = procedureRaw
         .replace(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/i, " ")
         .replace(/\b(Male|Female)\b/gi, " ")
         .replace(/\b\d{1,3}\s*years?\b/gi, " ")
+        .replace(/\b(?:Md|MD|Do|DO)\b/g, " ")
         .replace(/\[[^\]]*]/g, " ")
+        .replace(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\b/g, (m) => {
+          // remove likely provider names embedded in OCR procedure line
+          if (surgeonRaw && m.toLowerCase() === surgeonRaw.toLowerCase()) return " ";
+          return m;
+        })
         .replace(/\s+/g, " ")
         .trim();
-      const procedure = cleanProcedure(procedureRaw).replace(/\s+/g, " ").trim();
+      let procedure = cleanProcedure(procedureRaw)
+        .replace(/\bEua\b/gi, "EUA")
+        .replace(/\bAnoscpopy\b/gi, "anoscopy")
+        .replace(/\bTransrectal\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      procedure = procedure
+        .replace(/\bIncision And Drainage Of\b/gi, "incision and drainage of")
+        .replace(/\bEUA\s+anoscopy\b/i, "EUA, anoscopy")
+        .replace(/^([A-Z]{2,}),\s*/i, "$1, ");
 
       return [{ time, orRoom, surgeon, procedure, mrn, patient }];
     }
