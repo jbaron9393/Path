@@ -1178,43 +1178,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = (rwInput.value || "").trim();
       if (rwPreset === "frozens_helper") {
         const combined = rwFrozensImageText;
-        const historyText = String(text || rwFrozensHistory?.value || "").trim();
         if (!combined.trim()) return setStatus("Paste an OR schedule screenshot first.");
-        let briefHistory = "";
-        let priorPath = "";
-        if (historyText) {
-          const j = await apiPostJson("/api/rewrite", {
-            text: historyText,
-            model: modelEl?.value || "gpt-4.1-mini",
-            temperature: 0.1,
-            preset: "hpi",
-            rules: "Return concise pathology-focused BRIEF HPI only. Max 200 characters. Include diagnosis, site, relevant prior treatment, and indication for surgery.",
-            template: "",
-            imageDataUrls: [],
-            learningExamples: [],
-            clientDateContext: getClientDateContext(),
-          });
-          briefHistory = normalizeOutputText(j.text || "").replace(/\s+/g, " ").slice(0, 200).trim();
-          const p = await apiPostJson("/api/rewrite", {
-            text: historyText,
-            model: modelEl?.value || "gpt-4.1-mini",
-            temperature: 0.1,
-            preset: "hpi",
-            rules: "Return only PRIOR PATH summary. Mention in-house/outside/none and include case numbers if available. If unavailable return blank. Plain text only.",
-            template: "",
-            imageDataUrls: [],
-            learningExamples: [],
-            clientDateContext: getClientDateContext(),
-          });
-          priorPath = normalizeOutputText(p.text || "").replace(/\s+/g, " ").trim();
-        }
+        const parsedRows = parseFrozensRows(combined);
+        if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         const first = parsedRows[0];
-        const excelRows = [first.time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient, briefHistory, priorPath].join("\t");
-        rwOutput.value = excelRows;
-        rwOutput.dataset.raw = excelRows;
-        rwCopy.disabled = !excelRows;
+        const time = String(first.time || "").replace(":", "");
+        const sixColRow = [time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient].join("\t");
+        rwOutput.value = sixColRow;
+        rwOutput.dataset.raw = sixColRow;
+        rwCopy.disabled = !sixColRow;
         updateCorrectedButtonState();
-        setStatus("Done — generated one Excel-ready frozen row.");
+        setStatus("Done — generated one Excel-ready row (TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT).");
         return;
       }
       if (rwPreset === "hpi_conciser") {
