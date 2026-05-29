@@ -534,6 +534,88 @@ document.addEventListener("DOMContentLoaded", () => {
       return `${parts[0]}, ${parts.slice(1).join(" ")}`;
     }
 
+    const FROZENS_NAME_STOP_WORDS = new Set([
+      "And", "Anterior", "Base", "Biopsy", "Bilateral", "Cheek", "Closure", "Complex", "Dissection",
+      "Drainage", "Eua", "Excision", "Flap", "Forearm", "Free", "Graft", "Incision", "Laryngopharyngectomy",
+      "Left", "Local", "Lymph", "Mass", "Melanoma", "Neck", "Node", "Of", "Or", "Radial", "Resection",
+      "Right", "Sentinel", "Skin", "Split", "Thickness", "Tongue", "Total", "Wide", "With",
+    ]);
+
+    function isLikelyNameWord(word) {
+      return /^[A-Z][a-z'\-]+$/.test(word) && !FROZENS_NAME_STOP_WORDS.has(word);
+    }
+
+    function formatSurgeonNameFromWords(words) {
+      const parts = words.filter(Boolean);
+      if (parts.length < 2) return "";
+      return `${parts[0]}, ${parts.slice(1).join(" ")}`;
+    }
+
+    function findEmbeddedSurgeonInProcedure(procedure) {
+      const source = String(procedure || "");
+      const wordMatches = Array.from(source.matchAll(/\b[A-Z][A-Za-z'\-]+\b/g));
+      let best = null;
+
+      for (let i = 0; i < wordMatches.length; i += 1) {
+        if (!isLikelyNameWord(wordMatches[i][0])) continue;
+
+        const words = [wordMatches[i]];
+        let j = i + 1;
+        while (j < wordMatches.length && j - i < 3 && isLikelyNameWord(wordMatches[j][0])) {
+          const between = source.slice(words[words.length - 1].index + words[words.length - 1][0].length, wordMatches[j].index);
+          if (!/^\s+$/.test(between)) break;
+          words.push(wordMatches[j]);
+          j += 1;
+        }
+
+        if (words.length < 2) continue;
+
+        const prevWord = wordMatches[i - 1]?.[0] || "";
+        const nextWord = wordMatches[j]?.[0] || "";
+        const hasProcedureBoundary = !prevWord || FROZENS_NAME_STOP_WORDS.has(prevWord) || /[;,]\s*$/.test(source.slice(Math.max(0, words[0].index - 3), words[0].index));
+        const returnsToProcedure = !nextWord || FROZENS_NAME_STOP_WORDS.has(nextWord);
+        if (!hasProcedureBoundary || !returnsToProcedure) continue;
+
+        const start = words[0].index;
+        const end = words[words.length - 1].index + words[words.length - 1][0].length;
+        const raw = source.slice(start, end);
+        const candidate = {
+          raw,
+          name: formatSurgeonNameFromWords(words.map((word) => word[0])),
+          start,
+          end,
+          score: words.length,
+        };
+        if (!best || candidate.score > best.score) best = candidate;
+      }
+
+      return best;
+    }
+
+    function looksLikeProcedureFragment(value) {
+      const text = String(value || "").trim();
+      if (!text) return true;
+      return /\b(?:And|Of|Melanoma|Mass|Biopsy|Excision|Resection|Dissection)\b/i.test(text);
+    }
+
+    function removeTextSpan(source, span) {
+      if (!span) return source;
+      return `${source.slice(0, span.start)} ${source.slice(span.end)}`.replace(/\s+/g, " ").trim();
+    }
+
+    function sanityCheckFrozensRow(row) {
+      const checked = { ...row };
+      const embeddedSurgeon = findEmbeddedSurgeonInProcedure(checked.procedure);
+      if (embeddedSurgeon && (!checked.surgeon || looksLikeProcedureFragment(checked.surgeon) || embeddedSurgeon.score >= 3)) {
+        if (!checked.patient && checked.surgeon && !looksLikeProcedureFragment(checked.surgeon)) {
+          checked.patient = checked.surgeon;
+        }
+        checked.surgeon = embeddedSurgeon.name;
+        checked.procedure = cleanProcedure(removeTextSpan(checked.procedure, embeddedSurgeon));
+      }
+      return checked;
+    }
+
     function findSurgeonBox(text) {
       const source = String(text || "");
       const bracketMatches = Array.from(source.matchAll(/\[\s*\d[\d\s,.-]*\]/g));
@@ -606,7 +688,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         procedure = cleanProcedure(procedure);
         if (time || surgeon || procedure || mrn || patient) {
-          out.push([time, patient, procedure, mrn, surgeon].join("\t"));
+          const checked = sanityCheckFrozensRow({ time, orRoom: "", patient, procedure, mrn, surgeon });
+          out.push([checked.time, checked.patient, checked.procedure, checked.mrn, checked.surgeon].join("\t"));
         }
       }
       return out.join("\n");
@@ -673,7 +756,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\bEUA\s+anoscopy\b/i, "EUA, anoscopy")
         .replace(/^([A-Z]{2,}),\s*/i, "$1, ");
 
-      return [{ time, orRoom, surgeon, procedure, mrn, patient }];
+      return [sanityCheckFrozensRow({ time, orRoom, surgeon, procedure, mrn, patient })];
     }
     function normalizeFrozensOcrText(text) {
       return String(text || "")
