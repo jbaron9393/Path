@@ -447,7 +447,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const rwFrozensTools = document.getElementById("rwFrozensTools");
   const rwFrozensDropZone = document.getElementById("rwFrozensDropZone");
   const rwFrozensImageStatus = document.getElementById("rwFrozensImageStatus");
-  const rwFrozensHistory = document.getElementById("rwFrozensHistory");
   const rwPresetBtns = document.querySelectorAll(".rwPreset");
   const rwHpiConciserTools = document.getElementById("rwHpiConciserTools");
   const hpiVeryConcise = document.getElementById("hpiVeryConcise");
@@ -534,6 +533,123 @@ document.addEventListener("DOMContentLoaded", () => {
       if (parts.length < 2) return cleaned;
       return `${parts[0]}, ${parts.slice(1).join(" ")}`;
     }
+
+    const FROZENS_NAME_STOP_WORDS = new Set([
+      "And", "Anterior", "Base", "Biopsy", "Bilateral", "Cheek", "Closure", "Complex", "Dissection",
+      "Drainage", "Eua", "Excision", "Flap", "Forearm", "Free", "Graft", "Incision", "Laryngopharyngectomy",
+      "Left", "Local", "Lymph", "Mass", "Melanoma", "Neck", "Node", "Of", "Or", "Radial", "Resection",
+      "Right", "Sentinel", "Skin", "Split", "Thickness", "Tongue", "Total", "Wide", "With",
+    ]);
+
+    function isLikelyNameWord(word) {
+      return /^[A-Z][a-z'\-]+$/.test(word) && !FROZENS_NAME_STOP_WORDS.has(word);
+    }
+
+    function formatSurgeonNameFromWords(words) {
+      const parts = words.filter(Boolean);
+      if (parts.length < 2) return "";
+      return `${parts[0]}, ${parts.slice(1).join(" ")}`;
+    }
+
+    function findEmbeddedSurgeonInProcedure(procedure) {
+      const source = String(procedure || "");
+      const wordMatches = Array.from(source.matchAll(/\b[A-Z][A-Za-z'\-]+\b/g));
+      let best = null;
+
+      for (let i = 0; i < wordMatches.length; i += 1) {
+        if (!isLikelyNameWord(wordMatches[i][0])) continue;
+
+        const words = [wordMatches[i]];
+        let j = i + 1;
+        while (j < wordMatches.length && j - i < 3 && isLikelyNameWord(wordMatches[j][0])) {
+          const between = source.slice(words[words.length - 1].index + words[words.length - 1][0].length, wordMatches[j].index);
+          if (!/^\s+$/.test(between)) break;
+          words.push(wordMatches[j]);
+          j += 1;
+        }
+
+        if (words.length < 2) continue;
+
+        const prevWord = wordMatches[i - 1]?.[0] || "";
+        const nextWord = wordMatches[j]?.[0] || "";
+        const hasProcedureBoundary = !prevWord || FROZENS_NAME_STOP_WORDS.has(prevWord) || /[;,]\s*$/.test(source.slice(Math.max(0, words[0].index - 3), words[0].index));
+        const returnsToProcedure = !nextWord || FROZENS_NAME_STOP_WORDS.has(nextWord);
+        if (!hasProcedureBoundary || !returnsToProcedure) continue;
+
+        const start = words[0].index;
+        const end = words[words.length - 1].index + words[words.length - 1][0].length;
+        const raw = source.slice(start, end);
+        const candidate = {
+          raw,
+          name: formatSurgeonNameFromWords(words.map((word) => word[0])),
+          start,
+          end,
+          score: words.length,
+        };
+        if (!best || candidate.score > best.score) best = candidate;
+      }
+
+      return best;
+    }
+
+    function looksLikeProcedureFragment(value) {
+      const text = String(value || "").trim();
+      if (!text) return true;
+      return /\b(?:And|Of|Melanoma|Mass|Biopsy|Excision|Resection|Dissection)\b/i.test(text);
+    }
+
+    function removeTextSpan(source, span) {
+      if (!span) return source;
+      return `${source.slice(0, span.start)} ${source.slice(span.end)}`.replace(/\s+/g, " ").trim();
+    }
+
+    function sanityCheckFrozensRow(row) {
+      const checked = { ...row };
+      const embeddedSurgeon = findEmbeddedSurgeonInProcedure(checked.procedure);
+      if (embeddedSurgeon && (!checked.surgeon || looksLikeProcedureFragment(checked.surgeon) || embeddedSurgeon.score >= 3)) {
+        if (!checked.patient && checked.surgeon && !looksLikeProcedureFragment(checked.surgeon)) {
+          checked.patient = checked.surgeon;
+        }
+        checked.surgeon = embeddedSurgeon.name;
+        checked.procedure = cleanProcedure(removeTextSpan(checked.procedure, embeddedSurgeon));
+      }
+      return checked;
+    }
+
+    function findSurgeonBox(text) {
+      const source = String(text || "");
+      const bracketMatches = Array.from(source.matchAll(/\[\s*\d[\d\s,.-]*\]/g));
+      for (let i = bracketMatches.length - 1; i >= 0; i -= 1) {
+        const bracket = bracketMatches[i];
+        const bracketStart = bracket.index || 0;
+        const prefix = source.slice(0, bracketStart).replace(/\s+/g, " ").trim();
+        const tail = prefix.slice(-100).trim();
+        const commaNameMatch = tail.match(/((?:[A-Za-z'\-]+(?:\s+[A-Za-z'\-]+){0,2}),\s*[A-Za-z'\-]+(?:\s+[A-Za-z'\-]+){0,2}(?:\s*,?\s*(?:Md|MD|Do|DO))?)\s*$/);
+        let name = commaNameMatch ? normalizeName(commaNameMatch[1]) : "";
+        let nameStart = commaNameMatch ? bracketStart - tail.length + commaNameMatch.index : -1;
+
+        if (!name) {
+          const withoutCredentials = tail.replace(/\b(?:Md|MD|Do|DO)\b\.?\s*$/g, "").trim();
+          const wordMatches = Array.from(withoutCredentials.matchAll(/\b[A-Z][A-Za-z'\-]+\b/g));
+          const nameWords = wordMatches.slice(-2).map((match) => match[0]);
+          if (nameWords.length >= 2) {
+            name = formatNameNoComma(nameWords.join(" "));
+            nameStart = bracketStart - tail.length + wordMatches[wordMatches.length - nameWords.length].index;
+          }
+        }
+
+        if (name) {
+          return {
+            name,
+            start: Math.max(0, nameStart),
+            end: bracketStart + bracket[0].length,
+            raw: source.slice(Math.max(0, nameStart), bracketStart + bracket[0].length),
+          };
+        }
+      }
+      return null;
+    }
+
     function cleanProcedure(proc) {
       return String(proc || "")
         .replace(/\[[^\]]*]/g, "")
@@ -561,17 +677,19 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const line of lines) {
         const time = (line.match(/\b\d{1,2}:\d{2}\b|\b\d{3,4}\b/) || [""])[0];
         const mrn = (line.match(/\b\d{6,10}\b/) || [""])[0];
+        const surgeonBox = findSurgeonBox(line);
         const providerMatch = line.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?)\s*(?:\[|\bMD\b|\bDO\b)/);
-        const surgeon = normalizeName(providerMatch ? providerMatch[1] : "");
+        const surgeon = surgeonBox?.name || normalizeName(providerMatch ? providerMatch[1] : "");
         const patientMatch = line.match(/\b([A-Za-z' -]+,\s*[A-Za-z' -]+)(?:\s+\d{1,3}\s*[MF])?/);
         const patient = cleanPatient(patientMatch ? patientMatch[1] : "");
         let procedure = line;
-        [time, mrn, surgeon, patient].filter(Boolean).forEach((chunk) => {
+        [time, mrn, surgeonBox?.raw, surgeon, patient].filter(Boolean).forEach((chunk) => {
           procedure = procedure.replace(chunk, " ");
         });
         procedure = cleanProcedure(procedure);
         if (time || surgeon || procedure || mrn || patient) {
-          out.push([time, surgeon, procedure, mrn, patient].join("\t"));
+          const checked = sanityCheckFrozensRow({ time, orRoom: "", patient, procedure, mrn, surgeon });
+          out.push([checked.time, checked.patient, checked.procedure, checked.mrn, checked.surgeon].join("\t"));
         }
       }
       return out.join("\n");
@@ -603,12 +721,17 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\s+/g, " ")
         .trim();
 
-      const surgeonTailMatch = afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
-      const surgeonNoCommaMatch = afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
+      const surgeonBox = findSurgeonBox(afterMrn);
+      const surgeonTailMatch = surgeonBox ? null : afterMrn.match(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/);
+      const surgeonNoCommaMatch = surgeonBox ? null : afterMrn.match(/\b([A-Z][a-z'\-]+\s+[A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+)?)\s+(?:Md|MD|Do|DO)\b/);
       const surgeonRaw = surgeonTailMatch?.[1] || surgeonNoCommaMatch?.[1] || "";
-      const surgeon = (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw)).replace(/\s+/g, " ").trim();
+      const surgeon = (surgeonBox?.name || (surgeonTailMatch ? normalizeName(surgeonRaw) : formatNameNoComma(surgeonRaw))).replace(/\s+/g, " ").trim();
 
-      let procedureRaw = surgeonTailMatch ? afterMrn.slice(0, surgeonTailMatch.index).trim() : afterMrn;
+      let procedureRaw = surgeonBox
+        ? `${afterMrn.slice(0, surgeonBox.start)} ${afterMrn.slice(surgeonBox.end)}`.trim()
+        : surgeonTailMatch
+          ? afterMrn.slice(0, surgeonTailMatch.index).trim()
+          : afterMrn;
       procedureRaw = procedureRaw
         .replace(/([A-Za-z' -]+,\s*[A-Za-z' -]+(?:\s+[A-Za-z' -]+)?(?:\s*,?\s*(?:Md|MD|Do|DO))?(?:\s*\[[^\]]+\])?)\s*$/i, " ")
         .replace(/\b(Male|Female)\b/gi, " ")
@@ -633,7 +756,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .replace(/\bEUA\s+anoscopy\b/i, "EUA, anoscopy")
         .replace(/^([A-Z]{2,}),\s*/i, "$1, ");
 
-      return [{ time, orRoom, surgeon, procedure, mrn, patient }];
+      return [sanityCheckFrozensRow({ time, orRoom, surgeon, procedure, mrn, patient })];
     }
     function normalizeFrozensOcrText(text) {
       return String(text || "")
@@ -715,7 +838,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rwInput.placeholder = _preset === "gross_photo"
         ? "Optional context (e.g., specimen type, side, procedure, key findings)…"
         : _preset === "frozens_helper"
-          ? "Paste patient HPI/history here. OR schedule screenshot OCR text is added automatically when you paste a screenshot."
+          ? "Paste or drop an OR schedule screenshot; OCR text is added automatically."
         : _preset === "hpi_conciser"
           ? "Paste clinical history/HPI text. Output will be concise and Excel-ready."
         : _preset === "hpi"
@@ -1183,12 +1306,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!parsedRows.length) return setStatus("Could not parse schedule row.");
         const first = parsedRows[0];
         const time = String(first.time || "").replace(":", "");
-        const sixColRow = [time, first.orRoom, first.surgeon, first.procedure, first.mrn, first.patient].join("\t");
+        const sixColRow = [time, first.orRoom, first.patient, first.procedure, first.mrn, first.surgeon].join("\t");
         rwOutput.value = sixColRow;
         rwOutput.dataset.raw = sixColRow;
         rwCopy.disabled = !sixColRow;
         updateCorrectedButtonState();
-        setStatus("Done — generated one Excel-ready row (TIME, OR, SURGEON, PROCEDURE, MRN, PATIENT).");
+        setStatus("Done — generated one Excel-ready row (TIME, ROOM, PATIENT, PROCEDURE, MRN, SURGEON).");
         return;
       }
       if (rwPreset === "hpi_conciser") {
