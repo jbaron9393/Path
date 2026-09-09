@@ -807,18 +807,36 @@ VERIFY; DO NOT START OVER
 
 FINAL QA CHECKLIST
 1. Compare Pass 2 against the original for factual drift, lost useful facts, altered values, changed relationships, unnecessary terminology changes, or unsupported additions.
-2. Remove or reposition any cloze whose recall does not demonstrate useful medical knowledge.
-3. Add or move a cloze only when an obvious defining fact is visible and the card is meaningfully under-clozed.
-4. Check for over-clozing, oversized answers, redundant targets, awkward boundaries, and enough visible context for 2–5 second recall.
-5. Same-number clozes must form one logical recall task. Do not group unrelated facts merely to reduce card count.
-6. Renumber the final logical groups consecutively from c1.
+2. Internally rank the card’s facts before editing: A = defining/high-yield, B = useful supporting context, C = low-yield detail. Never output these labels. Prefer A as cloze targets, leave B visible, and leave C visible or remove it only when redundant.
+3. Ensure the card remains meaningfully testable, then remove or reposition any cloze whose recall does not demonstrate useful medical knowledge.
+4. For every cloze ask: “Could this blank be substantially smaller while testing the same concept?” If yes, shrink it.
+5. For every cloze ask: “Does this contain more than one independent recall task?” If yes, split it into logical groups or leave the supporting facts visible.
+6. Add or move a cloze only when an obvious defining fact is visible and the card is meaningfully under-clozed.
+7. Check for redundant targets, awkward boundaries, enough visible context, and 2–5 second recall.
+8. Same-number clozes must form one logical recall task. Do not group unrelated facts merely to reduce card count.
+9. Check inappropriate partial-word clozes, then renumber the final logical groups consecutively from c1.
 
 CLOZE PHILOSOPHY
 - Maximize information per cloze; do not maximize or minimize cloze count.
+- A long or complex card receives more reasoning, not more hidden text. Internally consider all candidate facts, select approximately 2–4 highest-value logical targets, and keep the remaining explanation visible. Longer cards often should hide a smaller percentage of their text.
 - Soft targets: short 1–2 groups, medium 2–3, complex/long usually 2–4 and occasionally 5. Never add or delete an excellent cloze merely to hit a number.
 - High-value examples include ABCA1, ApoE E2, orange tonsils, acanthocytes, microvesicular steatosis, EWSR1-WT1, distinctive IHC, characteristic labs, and defining mechanisms.
 - Reject generic targets such as Early, Usually, Type, Mutation, Homozygotes, Autosomal, Catalyzes, Increased, Adult, Serum, Produced, and other grammar-predictable words.
 - Entity names may be excellent targets when the visible card describes them, but never mechanically cloze every heading or disturb a simple direct question with a good answer cloze.
+
+HARD CLOZE-SIZE RULE
+- Large clozes are presumed bad. A cloze should normally contain one medical term, one short phrase, one short inseparable list, one relationship, or one equation/value.
+- Never cloze an entire paragraph, multiple sentences, a whole section, several independent relationships, or an explanation together with its answer and consequence.
+- Never confuse preserving source information with hiding it. A 150-word card may appropriately contain only three short clozes.
+- Do not wrap a list merely because every item is important. Prefer a few distinguishing items or a faster relationship-based association and leave the rest visible.
+- Comparison cards should hide the actual distinction: {{c1::Conjugated}} → water-soluble versus {{c2::Unconjugated}} → lipid-soluble, rather than hiding either whole explanatory sentence.
+- Enzyme/tissue associations should likewise use compact targets, such as LD1/2 → {{c1::heart / RBC / kidney}}, rather than hiding an entire LDH section.
+
+SIZE CORRECTION EXAMPLES
+- Bilirubin measurement:<br>Total: Diazocolorimetric method {{c1::with accelerator}}<br>Direct: Diazocolorimetric method {{c1::without accelerator}}<br>Indirect: {{c2::Total − Direct}}. Never place all three relationships in one cloze.
+- Elevated ALP sources:<br>• {{c1::Liver}} → bile duct obstruction, hepatic mass, cholestatic hepatitis<br>• {{c1::Bone}} → osteoblastic activity<br>Thermal stability:<br>• {{c2::Bone}} = most heat-labile<br>• {{c2::Placental}} = most heat-stable. Keep explanations visible.
+- AST vs ALT:<br>{{c1::AST}} → more sensitive, less specific<br>{{c1::ALT}} → more liver-specific<br>Half-life: ALT {{c2::~48 h}} > AST {{c2::~18 h}}. Never hide the explanatory comparison as a paragraph.
+- Reye syndrome may test {{c1::aspirin}}, {{c2::Microvesicular steatosis}}, and {{c3::Hypoglycemia}} while leaving the remaining clinical findings and labs visible.
 
 PARTIAL WORDS AND GROUPING
 - Keep directional partial-word clozes such as {{c1::hypo}}calcemia, {{c1::hyper}}kalemia, {{c1::under}}estimates, and {{c1::over}}estimates.
@@ -826,7 +844,7 @@ PARTIAL WORDS AND GROUPING
 - Logical grouping example: (+) {{c3::EMA / Claudin1 / GLUT1}} and (−) {{c3::S100}} may share c3. ApoE {{c2::E2}} and CAD risk “moderate” must not share a number.
 
 FINAL QUESTION
-Would a medical/pathology resident retrieve the highest-value hidden facts quickly, with enough visible context? If yes, return Pass 2 unchanged. If no, make only the smallest necessary correction.
+Apply both tests to every cloze: (1) Does recalling it demonstrate useful medical knowledge? (2) Is it hiding more than necessary to test that knowledge? A cloze must pass both. If a medical/pathology resident can already retrieve the highest-value hidden facts quickly with enough visible context, return Pass 2 unchanged. Otherwise make only the smallest necessary correction.
 
 Return only the final card texts separated by the supplied delimiter. Never include labels, originals, comparisons, explanations, Markdown fences, or processing metadata.
 `.trim();
@@ -894,9 +912,19 @@ function exportCardNeedsFinalQa(text, modelClassifiedComplex = false) {
 
 const EXPORT_MAX_CLOZE_WORDS = 4;
 
+function exportClozeHasOversizedStructure(answer) {
+  const value = String(answer || "");
+  const sentenceEndings = value.match(/[.!?](?=\s|<|$)/g)?.length || 0;
+  const relationshipArrows = value.match(/(?:→|->)/g)?.length || 0;
+  return /[\r\n]|<br\s*\/?>|<\/?(?:div|p|li|ul|ol|table|tr|h[1-6])\b|(?:^|[\r\n])\s*[•*-]\s+/i.test(value)
+    || sentenceEndings > 1
+    || relationshipArrows > 1;
+}
+
 function exportClozesWithinWordLimit(text, maxWords = EXPORT_MAX_CLOZE_WORDS) {
   for (const match of String(text || "").matchAll(/\{\{c\d+::([\s\S]*?)\}\}/gi)) {
     const answer = String(match[1] || "").split("::")[0].trim();
+    if (exportClozeHasOversizedStructure(answer)) return false;
     const visibleAnswer = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim();
     const compactPanel = visibleAnswer.split(/\s*\/\s*/).filter(Boolean);
     const isShortSlashPanel = compactPanel.length >= 2
@@ -943,6 +971,7 @@ function removeFillerExportClozes(text) {
 function enforceExportClozeWordLimit(text, maxWords = EXPORT_MAX_CLOZE_WORDS) {
   return String(text || "").replace(/\{\{c\d+::([\s\S]*?)\}\}/gi, (full, inner) => {
     const answer = String(inner).split("::")[0].trim();
+    if (exportClozeHasOversizedStructure(answer)) return answer;
     const visibleWords = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim().split(/\s+/).filter(Boolean);
     const compactPanel = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim()
       .split(/\s*\/\s*/).filter(Boolean);
