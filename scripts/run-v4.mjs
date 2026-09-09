@@ -15,7 +15,7 @@ async function prompt(name) {
 }
 
 function replacePromptConstant(name, value) {
-  const re = new RegExp(`const ${name} = \\`[\\s\\S]*?\\`\\.trim\\(\\);`);
+  const re = new RegExp("const " + name + " = `[\\s\\S]*?`\\.trim\\(\\);");
   if (!re.test(source)) throw new Error(`Could not find ${name} in server.js`);
   source = source.replace(re, `const ${name} = ${JSON.stringify(value)};`);
 }
