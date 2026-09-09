@@ -43,6 +43,8 @@ Most AI rules are prompt strings in `server.js`. Edit the matching block, save, 
 
 The Rewriter **Rules Override** box replaces its selected preset for that request. The Refiner and Exports **Extra Cloze Rules** boxes add request-specific instructions to the base cloze rules. These text boxes are defined in `cap_cloze_refiner.html`.
 
+Export refinement always uses two model passes. The first pass cleans and organizes each note while making a conservative initial cloze selection. The second pass uses `EXPORT_CLOZE_AUDIT_RULES` to audit only the retrieval targets, preserve the edited medical content, and ensure the finished Cloze note remains meaningfully testable. Cards classified as long or complex then receive an adaptive third QA pass using `EXPORT_FINAL_QA_RULES`; simple cards skip that additional model call.
+
 
 
 
