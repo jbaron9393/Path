@@ -427,9 +427,9 @@ app.post("/api/exports/apkg/rebuild", async (req, res) => {
 
       const originalEditableText = indexes.map((fieldIndex) => originalFields[fieldIndex]).join("\n===ANKI_FIELD===\n");
       const editedText = removeFillerExportClozes(
-        enforceExportClozeWordLimit(editedFields.join("\n===ANKI_FIELD===\n"), 2),
+        enforceExportClozeWordLimit(editedFields.join("\n===ANKI_FIELD===\n")),
       );
-      if (!exportClozesWithinWordLimit(editedText, 2) || !exportClozesAreMeaningful(editedText)) {
+      if (!exportClozesWithinWordLimit(editedText) || !exportClozesAreMeaningful(editedText)) {
         throw new Error(`Note ${noteId} contains an invalid cloze answer.`);
       }
       if (JSON.stringify(exportMediaReferences(editedText)) !== JSON.stringify(exportMediaReferences(originalEditableText))) {
@@ -631,6 +631,7 @@ Approach each note like an experienced resident manually editing it. Understand 
 - Shorten or remove material only when it is genuinely redundant, verbose, or obstructs rapid review.
 - A successful edit may be no more than shrinking a cloze, moving it to a better target, cleaning wording, or removing one redundant sentence.
 - Do not optimize for preserving old cloze placement, maximizing cloze count, or making every sentence testable. A strong result may have substantially fewer clozes and leave most information visible.
+- When uncertain whether a fact deserves a cloze, DO NOT CLOZE IT. The user would rather add one missing cloze than remove and reorganize many weak ones.
 - Return exactly one refined version that replaces the editable source text. Never append the original, an alternate version, commentary, or a separator.
 
 PRESERVE THE OPENING TERM FOR ALPHABETICAL ORDER
@@ -650,11 +651,12 @@ Before creating any cloze, internally ask: “What question does this card actua
 - Existing cloze placement and group count are not authoritative. Preserve useful content, but remove, move, shrink, merge, or split poor clozes.
 - A line, bullet, section, or category may contain no cloze. Visible information still provides useful context and reinforcement.
 - Do not distribute clozes across a card merely because several facts are present. Maximize the value of each cloze, not the number of clozes.
+- Never interpret “this information is medically important” as “this information must be hidden.” Important visible context makes the few selected prompts faster to answer.
 
 CLOZE THE ANSWER; LEAVE THE CLUE
 - Replace paragraph-, sentence-, and list-sized clozes with a few small, high-yield recall targets while keeping useful facts visible.
 - Hide the smallest medically meaningful distinguishing text that can be recalled in 2–5 seconds.
-- Clozes should normally contain only 1–2 words. An inseparable entity name or molecular alteration may remain intact when the full name is the appropriate recognition target.
+- Clozes should normally contain only 1–2 words, but do not blindly force one-word answers. Cloze the smallest meaningful medical unit. An inseparable disease/entity name, finding, or molecular alteration may remain intact when the whole phrase is the appropriate recognition target.
 - A compact slash-separated panel of short markers may exceed two tokens when the panel is one natural recall unit, such as {{c4::CD31 / ERG / FLI1}}.
 - Partial-word clozes are strongly encouraged when a direction or prefix is the tested fact: micro{{c1::albuminuria}}, {{c1::hyper}}kalemia, {{c1::hypo}}calcemia, {{c1::over}}estimates, {{c1::under}}estimates, renal {{c1::osteo}}dystrophy.
 - Leave explanatory mechanisms and supporting information visible. For example: Low Mg → {{c1::hypo}}calcemia via ↓ PTH release.
@@ -662,13 +664,14 @@ CLOZE THE ANSWER; LEAVE THE CLUE
 
 WHAT TO CLOZE
 1. Choose only facts whose recall demonstrates medically useful knowledge.
-2. For pathology cards, rank candidates by distinguishing value: useful entity/diagnosis, characteristic site, defining morphology, distinctive IHC, molecular/genetic feature, then highly characteristic clinical association.
-3. Deprioritize generic adjectives, verbs, age words, morphology words, common stains, sentence connectors, and facts already visible in a heading or elsewhere on the card. In particular, do not use Produced, Many, Activates, Immune, Decreased, May, Wide, Increase, Rise, or Normal as standalone answers when the actual finding, disease, pathway component, biomarker, or direction can be tested instead.
-4. Disease and tumor names may be clozed. Use a distinguishing portion when it provides a clean clue (Adult {{c1::Rhabdomyoma}}), but hide the full entity when that is the appropriate recognition target. Do not force either pattern universally.
-5. Multiple facts that form one natural recall task should share a cloze number. Example: Predominant intracellular: {{c1::K+}} / {{c1::phosphate}}; extracellular: {{c2::Na+}} / {{c2::chloride}}.
-6. Related IHC markers may likewise share a number when they are naturally recalled together. Do not create a separate logical card for every marker or bullet.
-7. Usually leave mechanisms, supporting explanations, long descriptive lists, generic morphology, generic stains, routine demographics, and prognosis visible unless one is genuinely distinguishing.
-8. When a list is the tested material, cloze only a few high-yield items and leave the rest visible. Example: Prerenal acute renal failure causes: {{c1::Hypovolemia}}, CHF, cirrhosis, {{c1::NSAIDs}}, ACE inhibitors, vasopressors.
+2. For general medical cards, rank candidates by distinguishing value: disease/entity, defining mechanism, key laboratory abnormality, characteristic clinical finding, important diagnostic association, then major treatment or treatment mechanism when relevant.
+3. For pathology cards, rank candidates by distinguishing value: useful entity/diagnosis, characteristic site, defining morphology, distinctive IHC, molecular/genetic feature, then highly characteristic clinical association or demographic.
+4. Deprioritize generic adjectives, verbs, age words, morphology words, common stains, sentence connectors, and facts already visible in a heading or elsewhere on the card. In particular, do not use Type, Mutation, Increased, Decreased, Early, Adult, Homozygous/Homozygosity/Homozygotes, Autosomal, Catalyzes, Produced, Mostly, Usually, Serum, Many, Activates, Immune, May, Wide, Rise, or Normal as standalone answers when the actual entity, gene, finding, substrate, biomarker, or direction can be tested instead.
+5. Disease and tumor names may be clozed. Use a distinguishing portion when it provides a clean clue (Adult {{c1::Rhabdomyoma}}), but hide the full entity when that is the appropriate recognition target. For example, use {{c1::Type III hyperlipidemia}}, never {{c1::Type}} III hyperlipidemia.
+6. Multiple facts that form one natural recall task should share a cloze number. Example: Predominant intracellular: {{c1::K+}} / {{c1::phosphate}}; extracellular: {{c2::Na+}} / {{c2::chloride}}.
+7. Related IHC markers may likewise share a number when they are naturally recalled together. Do not create a separate logical card for every marker or bullet.
+8. Usually leave mechanisms, supporting explanations, long descriptive lists, generic morphology, generic stains, routine demographics, and prognosis visible unless one is genuinely distinguishing.
+9. When a list is the tested material, cloze only a few high-yield items and leave the rest visible. Example: Prerenal acute renal failure causes: {{c1::Hypovolemia}}, CHF, cirrhosis, {{c1::NSAIDs}}, ACE inhibitors, vasopressors.
 
 NEVER CLOZE GENERIC LANGUAGE
 - Never cloze an article, conjunction, preposition, section label, list number, HTML markup, generic grammar word, or a vague verb/adjective merely because it appears in a distinct section.
@@ -691,7 +694,17 @@ CLOZE DENSITY AND NUMBERING
 - Renumber the remaining logical groups consecutively from c1 within each note, based on the final concepts rather than old numeric order.
 - Never hide a whole sentence, paragraph, explanation, histology section, or IHC panel when a small target can test the association.
 
+SPECIAL RULE FOR LONG CARDS
+- Bias heavily toward preserving visible context and under-clozing. A long card with 3 excellent logical groups is much better than the same card with 8 mediocre groups.
+- First clean and organize the text, remove redundancy, and preserve useful explanations visibly. Only then select the few highest-yield recall targets.
+- Entire sections may contain zero clozes. Do not add a cloze merely because the card has another section, sentence, bullet, or medically important detail.
+- Do not aggressively rewrite a well-organized long card simply to create more blanks.
+- The objective is HIGH INFORMATION PER CLOZE, not maximum cloze coverage.
+
 QUALITY EXAMPLES
+- {{c1::Tangier disease}}<br><br>MoD:<br>• AR mutation in {{c2::ABCA1}}<br>• Impaired cholesterol/phospholipid transfer → ApoA-I → impaired HDL formation → very low/absent HDL → cholesterol accumulation in tissues<br><br>Cx:<br>• {{c3::Orange tonsils}}<br>• Hepatosplenomegaly<br>• Peripheral neuropathy<br>• Premature coronary disease. Do not cloze “Autosomal,” “Homozygotes,” or every clinical bullet.
+- {{c1::Lecithin cholesterol acyltransferase (LCAT)}}<br><br>Function:<br>• Esterifies {{c2::cholesterol}}, especially in HDL<br>• Transfers fatty acids from lecithin → cholesterol<br>• Important for HDL maturation<br><br>LCAT deficiency → ↓ {{c3::HDL}}. Do not reduce the entity to “Lecithin” or test the generic verb “Catalyzes.”
+- Homozygosity for ApoE {{c2::E2}}, not {{c2::Homozygosity}} for ApoE E2.
 - {{c1::Michaelis-Menten}} kinetics:<br><br>Equation: V = Vmax[S] / (Km + [S])<br><br>As [S] ↑ → V approaches {{c2::Vmax}}<br><br>Vmax is directly proportional to {{c2::enzyme concentration}}<br><br>Km = {{c3::[S]}} at which V = {{c3::½ Vmax}}. The equation stays visible; the paired Vmax facts and paired Km-definition facts form logical recall groups.
 - {{c1::Epithelioid hemangioma}}<br><br>Histo:<br>• Capillary-sized vessels lined by {{c2::plump endothelial}} cells<br>• Nodular; may be solid/spindled<br>• Large grooved nuclei<br>• Prominent {{c3::eosinophils}} ± lymphocytes<br><br>IHC:<br>• (+) {{c4::CD31 / ERG / FLI1}}<br>• CD31 > CD34<br>• Keratin ±
 - {{c1::Perineurioma}}<br><br>Cx:<br>• Usually adults; superficial soft tissue of extremities/trunk<br>• Slow-growing, painless mass<br>• Sclerosing variant: young men, {{c2::hands/fingers}}<br><br>Histo:<br>• Benign; intraneural or mucosal<br>• {{c3::Storiform}} growth / long fascicles<br>• Collagenous-myxoid stroma<br><br>IHC:<br>• (+) {{c4::EMA / Claudin1 / GLUT1}}<br>• (−) {{c4::S100}}<br><br>Genetics:<br>• {{c5::22q}} abnormalities most frequent<br>• Association with NF not established<br><br>Tx/Px: Excision; excellent prognosis
@@ -768,29 +781,43 @@ function exportSortField(text) {
     .trim();
 }
 
-function exportClozesWithinWordLimit(text, maxWords = 2) {
+const EXPORT_MAX_CLOZE_WORDS = 4;
+
+function exportClozesWithinWordLimit(text, maxWords = EXPORT_MAX_CLOZE_WORDS) {
   for (const match of String(text || "").matchAll(/\{\{c\d+::([\s\S]*?)\}\}/gi)) {
     const answer = String(match[1] || "").split("::")[0].trim();
     const visibleAnswer = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim();
     const compactPanel = visibleAnswer.split(/\s*\/\s*/).filter(Boolean);
     const isShortSlashPanel = compactPanel.length >= 2
       && compactPanel.length <= 4
-      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= maxWords);
+      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= 2);
     if (!visibleAnswer || (!isShortSlashPanel && visibleAnswer.split(/\s+/).filter(Boolean).length > maxWords)) return false;
   }
   return true;
 }
 
 const EXPORT_CLOZE_FILLER_WORDS = new Set([
-  "a", "activates", "an", "and", "decreased", "due", "if", "immune", "in", "increase",
-  "many", "may", "normal", "of", "on", "or", "patchy", "produced", "rise", "the", "to", "wide",
+  "a", "activates", "adult", "an", "and", "autosomal", "catalyzes", "decreased", "defective",
+  "due", "early", "homozygotes", "homozygosity", "homozygous", "if", "immune", "in", "increase",
+  "increased", "many", "may", "mostly", "mutation", "normal", "of", "on", "or", "patchy",
+  "produced", "rise", "serum", "the", "to", "type", "usually", "wide",
 ]);
+
+const EXPORT_CLOZE_FILLER_PHRASES = new Set([
+  "early childhood", "defective absent",
+]);
+
+function exportClozeAnswerIsFiller(answer) {
+  const words = String(answer || "").replace(/<[^>]*>/g, " ").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  if (!words.length) return true;
+  if (EXPORT_CLOZE_FILLER_PHRASES.has(words.join(" "))) return true;
+  return words.every((word) => EXPORT_CLOZE_FILLER_WORDS.has(word));
+}
 
 function exportClozesAreMeaningful(text) {
   for (const match of String(text || "").matchAll(/\{\{c\d+::([\s\S]*?)\}\}/gi)) {
     const answer = String(match[1] || "").split("::")[0].replace(/<[^>]*>/g, " ").trim();
-    const words = answer.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
-    if (!words.length || words.some((word) => EXPORT_CLOZE_FILLER_WORDS.has(word))) return false;
+    if (exportClozeAnswerIsFiller(answer)) return false;
   }
   return true;
 }
@@ -798,36 +825,25 @@ function exportClozesAreMeaningful(text) {
 function removeFillerExportClozes(text) {
   return String(text || "").replace(/\{\{c\d+::([\s\S]*?)\}\}/gi, (full, inner) => {
     const answer = String(inner || "").split("::")[0];
-    const words = answer.replace(/<[^>]*>/g, " ").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
-    return !words.length || words.some((word) => EXPORT_CLOZE_FILLER_WORDS.has(word)) ? answer : full;
+    return exportClozeAnswerIsFiller(answer) ? answer : full;
   });
 }
 
-function enforceExportClozeWordLimit(text, maxWords = 2) {
-  return String(text || "").replace(/\{\{c(\d+)::([\s\S]*?)\}\}/gi, (full, number, inner) => {
-    const parts = String(inner).split("::");
-    const answer = String(parts.shift() || "").trim();
-    const hint = parts.length ? parts.join("::").trim() : "";
+function enforceExportClozeWordLimit(text, maxWords = EXPORT_MAX_CLOZE_WORDS) {
+  return String(text || "").replace(/\{\{c\d+::([\s\S]*?)\}\}/gi, (full, inner) => {
+    const answer = String(inner).split("::")[0].trim();
     const visibleWords = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim().split(/\s+/).filter(Boolean);
     const compactPanel = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim()
       .split(/\s*\/\s*/).filter(Boolean);
     const isShortSlashPanel = compactPanel.length >= 2
       && compactPanel.length <= 4
-      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= maxWords);
+      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= 2);
     if (visibleWords.length <= maxWords || isShortSlashPanel) return full;
 
-    // This is a last-resort safety net after the model repair pass. Select the
-    // first visible word without moving or deleting any HTML around it.
-    const candidates = Array.from(answer.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’+/-]*/gu));
-    const word = candidates.find((candidate) => {
-      const before = answer.slice(0, candidate.index);
-      return before.lastIndexOf("<") <= before.lastIndexOf(">");
-    });
-    if (!word) return answer;
-    const anchor = word[0];
-    const anchorIndex = word.index;
-    const wrapper = `{{c${number}::${anchor}${hint ? `::${hint}` : ""}}}`;
-    return `${answer.slice(0, anchorIndex)}${wrapper}${answer.slice(anchorIndex + anchor.length)}`;
+    // Do not manufacture a low-value first-word cloze from an oversized answer.
+    // The model gets a repair pass first; if it still cannot identify a concise
+    // medical unit, conservative export behavior is to leave the content visible.
+    return answer;
   });
 }
 
@@ -1184,7 +1200,7 @@ ${String(extraRules || "").trim() ? `USER-SPECIFIED EXPORT INSTRUCTIONS:\n${Stri
 FIELDS:
 ${rawText}`;
     let draft = await callOpenAI({ apiKey, model, temperature: 0.1, input: prompt });
-    if (!exportClozesWithinWordLimit(draft, 2) || !exportClozesAreMeaningful(draft)) {
+    if (!exportClozesWithinWordLimit(draft) || !exportClozesAreMeaningful(draft)) {
       draft = await callOpenAI({
         apiKey,
         model,
@@ -1194,7 +1210,7 @@ ${rawText}`;
 REPAIR THIS DRAFT:
 ${draft}
 
-Repair only the invalid clozes while preserving the draft’s opening meaningful term, useful wording, explanations, formatting, and organization. Return the same fields separated by ${d}. Keep each cloze to one or two medically meaningful words, move supporting text outside oversized wrappers, and never cloze generic language or list numbers. Do not regenerate the cards, append alternate versions, or remove useful visible details. Return only the repaired field text.`,
+Repair only the invalid clozes while preserving the draft’s opening meaningful term, useful wording, explanations, formatting, and organization. Return the same fields separated by ${d}. Use the smallest meaningful medical unit: normally one or two words, but preserve an inseparable disease/entity name, finding, or molecular alteration up to four words. Move supporting text outside oversized wrappers, and never cloze generic language or list numbers. Do not regenerate the cards, append alternate versions, or remove useful visible details. Return only the repaired field text.`,
       });
     }
     const outputFields = String(draft || "").split(d);
@@ -1212,7 +1228,7 @@ Repair only the invalid clozes while preserving the draft’s opening meaningful
         warning = "The proposed edit changed a media reference, so only numbering was updated.";
       }
 
-      const lengthSafeText = enforceExportClozeWordLimit(edited, 2);
+      const lengthSafeText = enforceExportClozeWordLimit(edited);
       const validatedText = removeFillerExportClozes(lengthSafeText);
       if (!warning && validatedText !== edited) {
         warning = "An invalid proposed cloze was shortened or removed by final validation.";
