@@ -623,13 +623,14 @@ You are editing existing Anki cards for fast, high-yield board review.
 
 These rules are the complete source of truth for Export-tab cloze editing. Do not use any other Anki editing rules.
 
-CORE PRINCIPLE — EDIT, DO NOT REGENERATE
-Approach each note like an experienced resident making a quick manual edit. Understand what the existing card is trying to test, then make the minimum useful changes needed to improve it.
+CORE PRINCIPLE — BUILD THE BEST ANKI CARD, NOT THE MOST FAMILIAR ONE
+Approach each note like an experienced resident manually editing it. Understand what the existing card is trying to test, then make whatever useful changes are needed to produce the best rapid-review card.
 - Preserve useful wording, explanations, formatting, organization, and medical detail.
-- Do not rewrite, summarize, or reorganize merely to make the card look different.
+- Do not rewrite, summarize, or reorganize merely to make the card look different, but freely rewrite the sentence around the important fact when the current grammar makes a low-value word the apparent answer.
 - If a card is already concise and useful, keep it mostly unchanged.
 - Shorten or remove material only when it is genuinely redundant, verbose, or obstructs rapid review.
 - A successful edit may be no more than shrinking a cloze, moving it to a better target, cleaning wording, or removing one redundant sentence.
+- Do not optimize for preserving old cloze placement, maximizing cloze count, or making every sentence testable. A strong result may have substantially fewer clozes and leave most information visible.
 - Return exactly one refined version that replaces the editable source text. Never append the original, an alternate version, commentary, or a separator.
 
 PRESERVE THE OPENING TERM FOR ALPHABETICAL ORDER
@@ -642,6 +643,7 @@ PRESERVE THE OPENING TERM FOR ALPHABETICAL ORDER
 
 SELECT CLOZES BY THE QUESTION AND INFORMATION GAIN
 Before creating any cloze, internally ask: “What question does this card actually want the learner to answer?” Do not output the question. Use the heading and visible context as its clue, then hide the smallest fragment that forces recall of the medically important answer.
+- Mentally turn the visible text around each proposed cloze into a question, then cloze the exact medical fact that answers it. If the hidden fragment would answer only “what grammatical word comes next?”, move or remove the cloze.
 - A medically related word is not automatically a useful cloze. Removing it must meaningfully change what the learner has to recall.
 - Cloze answers, not arbitrary sentence components. For Type 4 RTA, test persistent {{c1::hyper}}kalemia—not {{c1::Type}} 4 RTA.
 - Do not cloze information the card already gives away. For example, under the heading “Adult Rhabdomyoma,” leave a repeated “Adult” in the clinical line visible rather than testing it again.
@@ -653,6 +655,7 @@ CLOZE THE ANSWER; LEAVE THE CLUE
 - Replace paragraph-, sentence-, and list-sized clozes with a few small, high-yield recall targets while keeping useful facts visible.
 - Hide the smallest medically meaningful distinguishing text that can be recalled in 2–5 seconds.
 - Clozes should normally contain only 1–2 words. An inseparable entity name or molecular alteration may remain intact when the full name is the appropriate recognition target.
+- A compact slash-separated panel of short markers may exceed two tokens when the panel is one natural recall unit, such as {{c4::CD31 / ERG / FLI1}}.
 - Partial-word clozes are strongly encouraged when a direction or prefix is the tested fact: micro{{c1::albuminuria}}, {{c1::hyper}}kalemia, {{c1::hypo}}calcemia, {{c1::over}}estimates, {{c1::under}}estimates, renal {{c1::osteo}}dystrophy.
 - Leave explanatory mechanisms and supporting information visible. For example: Low Mg → {{c1::hypo}}calcemia via ↓ PTH release.
 - Preserve useful details when unwrapping a large original cloze; do not summarize them away automatically.
@@ -660,7 +663,7 @@ CLOZE THE ANSWER; LEAVE THE CLUE
 WHAT TO CLOZE
 1. Choose only facts whose recall demonstrates medically useful knowledge.
 2. For pathology cards, rank candidates by distinguishing value: useful entity/diagnosis, characteristic site, defining morphology, distinctive IHC, molecular/genetic feature, then highly characteristic clinical association.
-3. Deprioritize generic adjectives, verbs, age words, morphology words, common stains, sentence connectors, and facts already visible in a heading or elsewhere on the card.
+3. Deprioritize generic adjectives, verbs, age words, morphology words, common stains, sentence connectors, and facts already visible in a heading or elsewhere on the card. In particular, do not use Produced, Many, Activates, Immune, Decreased, May, Wide, Increase, Rise, or Normal as standalone answers when the actual finding, disease, pathway component, biomarker, or direction can be tested instead.
 4. Disease and tumor names may be clozed. Use a distinguishing portion when it provides a clean clue (Adult {{c1::Rhabdomyoma}}), but hide the full entity when that is the appropriate recognition target. Do not force either pattern universally.
 5. Multiple facts that form one natural recall task should share a cloze number. Example: Predominant intracellular: {{c1::K+}} / {{c1::phosphate}}; extracellular: {{c2::Na+}} / {{c2::chloride}}.
 6. Related IHC markers may likewise share a number when they are naturally recalled together. Do not create a separate logical card for every marker or bullet.
@@ -672,9 +675,11 @@ NEVER CLOZE GENERIC LANGUAGE
 - Bad targets include {{c1::Produced}}, {{c1::Mostly}}, {{c2::Intersecting}}, {{c1::1}}, {{c1::Type}}, and {{c12::Usually}}.
 - Also avoid standalone clozes such as the, a, an, due, if, in, on, of, to, and, or, patchy, higher, or lower. A direction word is appropriate only when the direction itself is the medical fact being tested.
 - Before accepting each cloze, ask: “Would recalling this hidden text demonstrate medically useful knowledge?” If not, move or remove it.
+- Examples of bad targeting: “{{c1::Activates}} alternative pathway: C3b” must become “Activates alternative pathway: {{c1::C3b}}”; “{{c1::Decreased}} C1 esterase inhibitor” should be rewritten around the disease, e.g. “Hereditary {{c1::angioedema}}<br>MoD: ↓ C1 esterase inhibitor → ↓ C4/C2, normal C3.”
 
 PATHOLOGY CARDS
 - Prefer only the few characteristics that distinguish the entity. Do not automatically cloze every age, sex, generic morphology word, adjective, positive stain, bullet, or section.
+- Ask “Which findings help me recognize this tumor?”, not “Which words could be hidden?” Keep useful clinical, histologic, IHC, genetic, treatment, and prognosis structure, remove verbosity, and cloze only recognition-defining information.
 - Example:<br>Leiomyoma<br>Histo: Intersecting fascicles of eosinophilic spindle cells with {{c1::cigar-shaped}} nuclei<br>IHC: Retroperitoneal tumors may be {{c2::ER/PR}}+
 - In that example, “Intersecting” and a demographic word such as “Mostly” are not useful targets merely because they are medically related.
 
@@ -687,6 +692,9 @@ CLOZE DENSITY AND NUMBERING
 - Never hide a whole sentence, paragraph, explanation, histology section, or IHC panel when a small target can test the association.
 
 QUALITY EXAMPLES
+- {{c1::Michaelis-Menten}} kinetics:<br><br>Equation: V = Vmax[S] / (Km + [S])<br><br>As [S] ↑ → V approaches {{c2::Vmax}}<br><br>Vmax is directly proportional to {{c2::enzyme concentration}}<br><br>Km = {{c3::[S]}} at which V = {{c3::½ Vmax}}. The equation stays visible; the paired Vmax facts and paired Km-definition facts form logical recall groups.
+- {{c1::Epithelioid hemangioma}}<br><br>Histo:<br>• Capillary-sized vessels lined by {{c2::plump endothelial}} cells<br>• Nodular; may be solid/spindled<br>• Large grooved nuclei<br>• Prominent {{c3::eosinophils}} ± lymphocytes<br><br>IHC:<br>• (+) {{c4::CD31 / ERG / FLI1}}<br>• CD31 > CD34<br>• Keratin ±
+- {{c1::Perineurioma}}<br><br>Cx:<br>• Usually adults; superficial soft tissue of extremities/trunk<br>• Slow-growing, painless mass<br>• Sclerosing variant: young men, {{c2::hands/fingers}}<br><br>Histo:<br>• Benign; intraneural or mucosal<br>• {{c3::Storiform}} growth / long fascicles<br>• Collagenous-myxoid stroma<br><br>IHC:<br>• (+) {{c4::EMA / Claudin1 / GLUT1}}<br>• (−) {{c4::S100}}<br><br>Genetics:<br>• {{c5::22q}} abnormalities most frequent<br>• Association with NF not established<br><br>Tx/Px: Excision; excellent prognosis
 - In diabetic nephropathy, development is preceded by micro{{c1::albuminuria}}.
 - Type 4 RTA:<br>non-anion gap metabolic acidosis with persistent {{c1::hyperkalemia}}.
 - Creatinine clearance slightly {{c1::over}}estimates GFR because creatinine is secreted by renal tubules.<br>BUN slightly {{c1::under}}estimates GFR because BUN is partially reabsorbed.
@@ -711,7 +719,8 @@ Before returning each note, confirm:
 9. The card can be answered rapidly.
 10. The rendered first meaningful term still matches the original and remains at the beginning, unless preserving it would be medically confusing.
 11. The result looks manually edited rather than regenerated.
-12. There is exactly one refined version of the note.
+12. Every remaining cloze earns its place by supporting fast recognition with high information per cloze.
+13. There is exactly one refined version of the note.
 
 OUTPUT
 - Return the same number of fields in the same order, separated only by the supplied delimiter.
@@ -763,13 +772,18 @@ function exportClozesWithinWordLimit(text, maxWords = 2) {
   for (const match of String(text || "").matchAll(/\{\{c\d+::([\s\S]*?)\}\}/gi)) {
     const answer = String(match[1] || "").split("::")[0].trim();
     const visibleAnswer = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim();
-    if (!visibleAnswer || visibleAnswer.split(/\s+/).filter(Boolean).length > maxWords) return false;
+    const compactPanel = visibleAnswer.split(/\s*\/\s*/).filter(Boolean);
+    const isShortSlashPanel = compactPanel.length >= 2
+      && compactPanel.length <= 4
+      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= maxWords);
+    if (!visibleAnswer || (!isShortSlashPanel && visibleAnswer.split(/\s+/).filter(Boolean).length > maxWords)) return false;
   }
   return true;
 }
 
 const EXPORT_CLOZE_FILLER_WORDS = new Set([
-  "a", "an", "and", "due", "if", "in", "of", "on", "or", "patchy", "the", "to",
+  "a", "activates", "an", "and", "decreased", "due", "if", "immune", "in", "increase",
+  "many", "may", "normal", "of", "on", "or", "patchy", "produced", "rise", "the", "to", "wide",
 ]);
 
 function exportClozesAreMeaningful(text) {
@@ -795,7 +809,12 @@ function enforceExportClozeWordLimit(text, maxWords = 2) {
     const answer = String(parts.shift() || "").trim();
     const hint = parts.length ? parts.join("::").trim() : "";
     const visibleWords = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim().split(/\s+/).filter(Boolean);
-    if (visibleWords.length <= maxWords) return full;
+    const compactPanel = answer.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim()
+      .split(/\s*\/\s*/).filter(Boolean);
+    const isShortSlashPanel = compactPanel.length >= 2
+      && compactPanel.length <= 4
+      && compactPanel.every((item) => item.split(/\s+/).filter(Boolean).length <= maxWords);
+    if (visibleWords.length <= maxWords || isShortSlashPanel) return full;
 
     // This is a last-resort safety net after the model repair pass. Select the
     // first visible word without moving or deleting any HTML around it.
