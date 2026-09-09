@@ -788,8 +788,47 @@ REFERENCE CORRECTIONS
 
 FINALIZATION
 - Renumber logical groups consecutively from c1 in first-appearance order.
+- Internally classify each card as SIMPLE or COMPLEX. If it is short but contains multiple independent medical relationships or difficult cloze decisions, append the exact marker <!--EXPORT_COMPLEX--> to that field. Do not emit any other classification text. The server removes this marker before displaying or saving the card.
 - Return exactly the same number of fields, in the same order, separated only by the supplied delimiter.
 - Return only the audited field text. No commentary, Markdown fences, originals, alternatives, or explanations.
+`.trim();
+
+const EXPORT_COMPLEX_MARKER = "<!--EXPORT_COMPLEX-->";
+
+const EXPORT_FINAL_QA_RULES = `
+You are performing PASS 3, a final quality check on long or complex Anki cards. You receive both the ORIGINAL card and its PASS 2 edit. The original is the source of truth for medical information.
+
+VERIFY; DO NOT START OVER
+- Strongly prefer returning a good Pass 2 card unchanged.
+- Make only the smallest corrections needed. Do not perform another broad rewrite.
+- Do not expand the card, add unsupported medicine, or casually change mechanisms, terminology, quantitative values, or relationships.
+- Restore useful source information accidentally removed or altered by Pass 1/2, while retaining legitimate cleanup and redundancy removal.
+- Preserve HTML, media references, field count, and readable organization.
+
+FINAL QA CHECKLIST
+1. Compare Pass 2 against the original for factual drift, lost useful facts, altered values, changed relationships, unnecessary terminology changes, or unsupported additions.
+2. Remove or reposition any cloze whose recall does not demonstrate useful medical knowledge.
+3. Add or move a cloze only when an obvious defining fact is visible and the card is meaningfully under-clozed.
+4. Check for over-clozing, oversized answers, redundant targets, awkward boundaries, and enough visible context for 2–5 second recall.
+5. Same-number clozes must form one logical recall task. Do not group unrelated facts merely to reduce card count.
+6. Renumber the final logical groups consecutively from c1.
+
+CLOZE PHILOSOPHY
+- Maximize information per cloze; do not maximize or minimize cloze count.
+- Soft targets: short 1–2 groups, medium 2–3, complex/long usually 2–4 and occasionally 5. Never add or delete an excellent cloze merely to hit a number.
+- High-value examples include ABCA1, ApoE E2, orange tonsils, acanthocytes, microvesicular steatosis, EWSR1-WT1, distinctive IHC, characteristic labs, and defining mechanisms.
+- Reject generic targets such as Early, Usually, Type, Mutation, Homozygotes, Autosomal, Catalyzes, Increased, Adult, Serum, Produced, and other grammar-predictable words.
+- Entity names may be excellent targets when the visible card describes them, but never mechanically cloze every heading or disturb a simple direct question with a good answer cloze.
+
+PARTIAL WORDS AND GROUPING
+- Keep directional partial-word clozes such as {{c1::hypo}}calcemia, {{c1::hyper}}kalemia, {{c1::under}}estimates, and {{c1::over}}estimates.
+- Do not split ordinary medical terms: hepato{{c1::encephalopathy}}, micro{{c1::vesicular}}, and atheros{{c1::clerosis}} must become a whole meaningful target or visible text.
+- Logical grouping example: (+) {{c3::EMA / Claudin1 / GLUT1}} and (−) {{c3::S100}} may share c3. ApoE {{c2::E2}} and CAD risk “moderate” must not share a number.
+
+FINAL QUESTION
+Would a medical/pathology resident retrieve the highest-value hidden facts quickly, with enough visible context? If yes, return Pass 2 unchanged. If no, make only the smallest necessary correction.
+
+Return only the final card texts separated by the supplied delimiter. Never include labels, originals, comparisons, explanations, Markdown fences, or processing metadata.
 `.trim();
 
 function clozeNumbersInOrder(text) {
@@ -830,6 +869,27 @@ function exportSortField(text) {
     .replace(/&nbsp;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function exportCardNeedsFinalQa(text, modelClassifiedComplex = false) {
+  if (modelClassifiedComplex) return true;
+
+  const structuredText = exportVisibleText(text)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:div|p|li|ul|ol|table|tr|h[1-6])>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ");
+  const lines = structuredText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const headings = lines.filter((line) => /^[\p{L}][\p{L}\p{N} /&()+-]{0,35}:\s*$/u).length;
+  const factualLines = lines.filter((line) => !/^[\p{L}][\p{L}\p{N} /&()+-]{0,35}:\s*$/u.test(line)).length;
+  const relationshipSignals = structuredText.match(/(?:→|->|↑|↓|=|\b(?:associated|causes?|converts?|deficien\w*|inhibit\w*|activat\w*|mutation|risk|synthesis|formation|positive|negative)\b)/gi)?.length || 0;
+  const meaningfulCharacters = structuredText.replace(/\s+/g, " ").trim().length;
+
+  return headings >= 3
+    || factualLines >= 5
+    || relationshipSignals >= 4
+    || clozeNumbersInOrder(text).length >= 4
+    || meaningfulCharacters > 700;
 }
 
 const EXPORT_MAX_CLOZE_WORDS = 4;
@@ -1275,14 +1335,53 @@ ${String(extraRules || "").trim() ? `USER-SPECIFIED EXPORT INSTRUCTIONS:\n${Stri
 PASS 1 OUTPUT TO AUDIT:
 ${draft}`,
     });
-    const auditedFields = String(auditedDraft || "").split(d);
+    const rawAuditedFields = String(auditedDraft || "").split(d);
     const draftFields = String(draft || "").split(d);
-    const auditHasExpectedFields = auditedFields.length === sourceFields.length;
+    const auditHasExpectedFields = rawAuditedFields.length === sourceFields.length;
+    const auditComplexityFlags = sourceFields.map((_, index) => (
+      auditHasExpectedFields && rawAuditedFields[index].includes(EXPORT_COMPLEX_MARKER)
+    ));
+    const auditedFields = rawAuditedFields.map((field) => field.replaceAll(EXPORT_COMPLEX_MARKER, "").trim());
+    const passTwoFields = sourceFields.map((_, index) => (
+      auditHasExpectedFields ? auditedFields[index] : draftFields[index]
+    ));
+    const finalQaIndexes = passTwoFields
+      .map((field, index) => (exportCardNeedsFinalQa(field, auditComplexityFlags[index]) ? index : -1))
+      .filter((index) => index >= 0);
+    const finalQaByIndex = new Map();
+
+    if (finalQaIndexes.length) {
+      const qaRecords = finalQaIndexes.map((index, qaIndex) => [
+        `QA CARD ${qaIndex + 1} ORIGINAL:`,
+        sourceFields[index],
+        `QA CARD ${qaIndex + 1} PASS 2:`,
+        passTwoFields[index],
+      ].join("\n")).join("\n\n===QA_CARD_RECORD===\n\n");
+      const finalQaDraft = await callOpenAI({
+        apiKey,
+        model,
+        temperature: 0.1,
+        input: `${EXPORT_FINAL_QA_RULES}
+
+OUTPUT DELIMITER: ${d}
+${String(extraRules || "").trim() ? `USER-SPECIFIED EXPORT INSTRUCTIONS:\n${String(extraRules).trim()}\n` : ""}
+${qaRecords}`,
+      });
+      const finalQaFields = String(finalQaDraft || "").split(d);
+      if (finalQaFields.length === finalQaIndexes.length) {
+        finalQaIndexes.forEach((sourceIndex, qaIndex) => {
+          finalQaByIndex.set(sourceIndex, finalQaFields[qaIndex].trim());
+        });
+      }
+    }
 
     const cards = sourceFields.map((original, index) => {
       const passOneCandidate = draftFields[index];
       const auditedCandidate = auditHasExpectedFields ? auditedFields[index] : null;
-      const candidate = auditedCandidate != null && clozeNumbersInOrder(auditedCandidate).length
+      const finalQaCandidate = finalQaByIndex.get(index);
+      const candidate = finalQaCandidate != null && clozeNumbersInOrder(finalQaCandidate).length
+        ? finalQaCandidate
+        : auditedCandidate != null && clozeNumbersInOrder(auditedCandidate).length
         ? auditedCandidate
         : passOneCandidate;
       let warning = "";
@@ -1294,10 +1393,12 @@ ${draft}`,
       } else if (auditedCandidate == null) {
         warning = "The cloze audit returned an invalid field count, so the first-pass edit was used.";
       } else if (JSON.stringify(exportMediaReferences(candidate)) !== JSON.stringify(exportMediaReferences(original))) {
+        const passTwoPreservesMedia = passTwoFields[index] != null
+          && JSON.stringify(exportMediaReferences(passTwoFields[index])) === JSON.stringify(exportMediaReferences(original));
         const passOnePreservesMedia = passOneCandidate != null
           && JSON.stringify(exportMediaReferences(passOneCandidate)) === JSON.stringify(exportMediaReferences(original));
-        edited = passOnePreservesMedia ? passOneCandidate : original;
-        warning = "The cloze audit changed a media reference, so its result was not used.";
+        edited = passTwoPreservesMedia ? passTwoFields[index] : passOnePreservesMedia ? passOneCandidate : original;
+        warning = "A refinement pass changed a media reference, so its result was not used.";
       }
 
       const lengthSafeText = enforceExportClozeWordLimit(edited);
