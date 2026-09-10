@@ -11,6 +11,7 @@ import { promisify } from "util";
 import * as zlib from "zlib";
 import { createHash, randomUUID } from "crypto";
 import { syncGrossingManualVendor } from "./scripts/sync-grossing-manual.mjs";
+import { validateExportClozes } from "./lib/exportClozeValidator.js";
 
 dotenv.config({ override: true });
 
@@ -28,6 +29,7 @@ let styleSeedLibrary = { micro: [], gross: [], path: [] };
 let grossingManualSyncPromise = null;
 const exportJobs = new Map();
 const EXPORT_JOB_TTL_MS = 60 * 60 * 1000;
+const EXPORT_PIPELINE_VERSION = "v5";
 
 async function removeExportJob(token) {
   const job = exportJobs.get(token);
@@ -1340,19 +1342,6 @@ ${String(extraRules || "").trim() ? `USER-SPECIFIED EXPORT INSTRUCTIONS:\n${Stri
 FIELDS:
 ${rawText}`;
     let draft = await callOpenAI({ apiKey, model, temperature: 0.1, input: prompt });
-    if (!exportClozesWithinWordLimit(draft) || !exportClozesAreMeaningful(draft)) {
-      draft = await callOpenAI({
-        apiKey,
-        model,
-        temperature: 0.1,
-        input: `${EXPORT_RULES}
-
-REPAIR THIS DRAFT:
-${draft}
-
-Repair only the invalid clozes while preserving the draft’s opening meaningful term, useful wording, explanations, formatting, and organization. Return the same fields separated by ${d}. Use the smallest meaningful medical unit: normally one or two words, but preserve an inseparable disease/entity name, finding, or molecular alteration up to four words. Move supporting text outside oversized wrappers, and never cloze generic language or list numbers. Do not regenerate the cards, append alternate versions, or remove useful visible details. Return only the repaired field text.`,
-      });
-    }
     const auditedDraft = await callOpenAI({
       apiKey,
       model,
@@ -1404,7 +1393,7 @@ ${qaRecords}`,
       }
     }
 
-    const cards = sourceFields.map((original, index) => {
+    const passThreeFields = sourceFields.map((original, index) => {
       const passOneCandidate = draftFields[index];
       const auditedCandidate = auditHasExpectedFields ? auditedFields[index] : null;
       const finalQaCandidate = finalQaByIndex.get(index);
@@ -1430,16 +1419,88 @@ ${qaRecords}`,
         warning = "A refinement pass changed a media reference, so its result was not used.";
       }
 
-      const lengthSafeText = enforceExportClozeWordLimit(edited);
-      let validatedText = removeFillerExportClozes(lengthSafeText);
-      if (!clozeNumbersInOrder(validatedText).length) {
-        const passOneValidated = removeFillerExportClozes(enforceExportClozeWordLimit(passOneCandidate));
-        validatedText = clozeNumbersInOrder(passOneValidated).length ? passOneValidated : original;
-        warning = "The cloze audit left no valid retrieval target, so a clozed fallback was preserved.";
-      } else if (!warning && validatedText !== edited) {
-        warning = "An invalid proposed cloze was shortened or removed by final validation.";
+      return { original, text: edited, warning };
+    });
+
+    // Pass 4 is deliberately code-driven. Every card is inspected regardless of
+    // whether Pass 2 classified it as complex, and only failed cards reach AI.
+    const initialValidations = passThreeFields.map(({ text }) => validateExportClozes(text));
+    const repairedByIndex = new Map();
+    await Promise.all(initialValidations.map(async (validation, index) => {
+      if (validation.passed) return;
+      const failedCard = passThreeFields[index].text;
+      const repaired = String(await callOpenAI({
+        apiKey,
+        model,
+        temperature: 0.1,
+        input: `You are repairing cloze placement only.
+
+Do not broadly rewrite this card.
+
+The card failed structural cloze validation.
+
+Repair giant clozes, grammatical-fragment clozes, and illogical grouping.
+
+Preserve the source medical content.
+
+Hide the minimum text necessary to test the medical relationship.
+
+Supporting explanation should remain visible.
+
+Return only the repaired card, with no commentary or Markdown fence.
+
+FAILED CARD:
+${failedCard}`,
+      })).trim();
+      repairedByIndex.set(index, repaired);
+    }));
+
+    const cards = passThreeFields.map(({ original, text: previous, warning }, index) => {
+      const initialValidation = initialValidations[index];
+      const repaired = repairedByIndex.get(index);
+      let selected = previous;
+      let finalValidation = initialValidation;
+
+      if (repaired != null) {
+        const repairedPreservesMedia = JSON.stringify(exportMediaReferences(repaired))
+          === JSON.stringify(exportMediaReferences(original));
+        const repairedValidation = repairedPreservesMedia
+          ? validateExportClozes(repaired)
+          : { passed: false, reasons: ["bad_grouping"] };
+
+        // A successful repair always wins. If both versions still fail, retain
+        // whichever has fewer objective violations; ties favor the prior pass.
+        if (repairedPreservesMedia && (
+          repairedValidation.passed
+          || repairedValidation.reasons.length < initialValidation.reasons.length
+        )) {
+          selected = repaired;
+          finalValidation = repairedValidation;
+        }
+        if (!finalValidation.passed) {
+          warning = "Structural cloze validation still failed after one targeted repair attempt.";
+        }
       }
-      return { original, text: renumberExportClozes(validatedText).text, warning };
+
+      const logReasons = initialValidation.reasons.length ? initialValidation.reasons : ["none"];
+      console.debug([
+        `EXPORT PIPELINE VERSION: ${EXPORT_PIPELINE_VERSION}`,
+        `CARD ${index + 1}:`,
+        "Pass 1: ran",
+        "Pass 2: ran",
+        `Complex: ${auditComplexityFlags[index] ? "yes" : "no"}`,
+        `Pass 3: ${finalQaIndexes.includes(index) ? "ran" : "skipped"}`,
+        `Validation: ${initialValidation.passed ? "passed" : "failed"}`,
+        "Validation reason:",
+        ...logReasons.map((reason) => `- ${reason}`),
+        `Repair pass: ${repaired == null ? "skipped" : "ran"}`,
+        ...(repaired != null ? [
+          `Second validation: ${finalValidation.passed ? "passed" : "failed"}`,
+          ...(!finalValidation.passed ? finalValidation.reasons.map((reason) => `- ${reason}`) : []),
+        ] : []),
+      ].join("\n"));
+
+      return { original, text: selected, warning };
     });
 
     return res.json({ cards });

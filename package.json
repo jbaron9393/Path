@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node scripts/run-v4.mjs",
+    "test": "node --test",
     "sync:grossing-manual": "node scripts/sync-grossing-manual.mjs"
   },
   "dependencies": {
